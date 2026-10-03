@@ -1,4 +1,4 @@
-# CHIM Social Drama v1 — Unfinished Business & Promises — design
+# Sworn & Scorned v1 (CHIM plugin) — Unfinished Business & Promises — design
 
 Date: 2026-10-03. Status: design approved in brainstorming; not implemented.
 Source notebook: `K:\ActorwrightExchange\projects\CHIM-Social-Drama-Ideas.md`.
@@ -17,7 +17,7 @@ conversation, and roll back with the save.
 | --- | --- |
 | Mind Poisoning (MP) | Opinion change from what is said *about* a third party (per line). |
 | Private Conversation (PCV) | Scene staging: who speaks, who hears. Scope closed at 0.1.14. |
-| **Social Drama (this)** | Grievances and promises *between* two parties; lifecycle affinity only. |
+| **Sworn & Scorned (this)** | Grievances and promises *between* two parties; lifecycle affinity only. |
 
 - Works alone. Reads only CHIM data (`eventlog`, `core_npc_master`, the `_speech`
   acknowledgement). Never reads MP's ledger or PCV's state files.
@@ -25,9 +25,9 @@ conversation, and roll back with the save.
   perspective filtering more precise; no PCV code is called.
 - Never changes affinity per line (that is MP's and CHIM's). Changes affinity only on an
   issue lifecycle transition (§6). No overlap with MP by construction.
-- Ext directory: `social_drama` (sorts after `mind_poisoning` and `private_conversation`,
-  so its hooks run last under `scandir` order). Prefixes: PHP namespace `ChimSocialDrama`,
-  constants `SOCIAL_DRAMA_*`. Name may change before release.
+- Ext directory: `sworn_and_scorned` (sorts after `mind_poisoning` and `private_conversation`,
+  so its hooks run last under `scandir` order). Prefixes: PHP namespace `ChimSwornAndScorned`,
+  constants `SWORN_SCORNED_*`. Display name: "Sworn & Scorned" (chosen 2026-10-03).
 - Never writes `HERIKA_PERS`; never overrides SHARMAT or other condition prompts.
 
 ## 3. Parties and cast
@@ -43,7 +43,7 @@ conversation, and roll back with the save.
 
 ### 4.1 Perspective ledger (authoritative)
 
-`core_npc_master.plugin_extended_data -> 'social_drama'`, one per NPC row. Written with
+`core_npc_master.plugin_extended_data -> 'sworn_and_scorned'`, one per NPC row. Written with
 `jsonb_set` on this key only, and snapshotted into `core_npc_master_history` on every
 commit (MP's pattern), so CHIM restore rolls it back with the save.
 
@@ -74,14 +74,14 @@ commit (MP's pattern), so CHIM restore rolls it back with the save.
 
 ### 4.2 Job queue (transient)
 
-Table `social_drama_jobs`, created lazily: `event_id` (unique), speaker, addressed
+Table `sworn_scorned_jobs`, created lazily: `event_id` (unique), speaker, addressed
 listener, people, playthrough_id, gamets, status, attempts, lease_until, last_error.
 Append-only; one row per acknowledged line. **Never coalesced per NPC** (CHIM's
 relationship queue upserts per NPC and would lose earlier commitments).
 
 ### 4.3 Pacing (transient)
 
-Table `social_drama_pacing`: (npc, issue id) → last surfaced time, surfaced event id.
+Table `sworn_scorned_pacing`: (npc, issue id) → last surfaced time, surfaced event id.
 Not snapshotted: pacing is not story state and must not be on the ledger write path.
 
 ## 5. Async pipeline
