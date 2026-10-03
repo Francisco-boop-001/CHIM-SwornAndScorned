@@ -30,6 +30,32 @@ conversation, and roll back with the save.
   constants `SWORN_SCORNED_*`. Display name: "Sworn & Scorned" (chosen 2026-10-03).
 - Never writes `HERIKA_PERS`; never overrides SHARMAT or other condition prompts.
 
+## 2a. Compatibility contract (hard requirement)
+
+Sworn & Scorned must be **fully compatible** with Mind Poisoning, Private Conversation and
+SHARMAT (`aiagent_nsfw`), and must **work with none of them installed**. Every combination
+of the three, present or absent, is a supported configuration.
+
+General rules:
+
+- **No code dependency.** Never `require`, include, or call another plugin's files or
+  functions; never read their private state (MP ledger, PCV temp files, SHARMAT data).
+  Their presence is only ever observed through CHIM's own data (`eventlog` rows, people
+  lists, listeners).
+- **No writes outside our own keys.** Never write another plugin's
+  `plugin_extended_data` key, files, settings or globals; never modify request globals
+  (`$gameRequest`, prompt arrays) other than appending our own context entry.
+- **Additive prompt context only.** One capped entry (≤240 chars), added beside existing
+  context; never replaces, reorders, or removes anything another plugin injected.
+- **Distinct names.** Namespace `ChimSwornAndScorned`, constants `SWORN_SCORNED_*`, tables
+  `sworn_scorned_*`, ext dir `sworn_and_scorned`; no copied library code that could clash.
+
+| Plugin | When present | When absent |
+| --- | --- | --- |
+| **Mind Poisoning** | MP judges per-line opinion; we change affinity only on lifecycle transitions, so no double counting. Shared `core_npc_master` row: same lock order (advisory, then row), `jsonb_set` on our key only, affinity as a relative change inside the transaction; both plugins' history snapshots remain valid full-row restores. MP's `_speech` prerequest runs before ours; ours only enqueues and changes nothing MP reads. Same `NEVER_CLEAR_RELATIONSHIP_DATA` behaviour as MP. | Nothing changes; lifecycle affinity and issues work as designed. |
+| **Private Conversation** | Scene lines carry exact witness lists (`eventlog.people` = members) → precise perspective filtering. Lines addressed to `explicit_disable_rechat` (solo reflection, wrap-up) are not exchanges and are skipped. `The Narrator: <direction>` instruction rows are never evidence. Player issues are not surfaced in scenes that exclude the player. Our context entry must survive PCV's nearby-actor replacement (verify injection point). We never touch PCV's `JSON_TEMPLATE` hook or strict-rechat handling. | Presence comes from CHIM's own addressed listener and `eventlog.people`; treated as eligibility, not proof of hearing. |
+| **SHARMAT** (`aiagent_nsfw`) | Its per-NPC condition prompts (e.g. drunk stages) are never overridden, reordered, or shortened; our entry sits beside them. We never write `HERIKA_PERS`. SHARMAT actions (e.g. `Consume`) are not speech and are never evidence. Slurred or degraded lines are judged like any line; low confidence → no change. | Nothing changes. |
+
 ## 3. Parties and cast
 
 - Parties: NPC↔NPC and NPC↔player. The player's own perspective is not modelled; a
@@ -229,7 +255,10 @@ affinity. Under `NEVER_CLEAR_RELATIONSHIP_DATA=true`, no writes (as MP).
    "I'll try"; promise then apology order; declined favour.
 3. DB integration on the **test clone only** (never the live distro): concurrent writes
    with MP; reload in flight; snapshot/restore; worker start/stop/restart.
-4. Coexistence: alone, +MP, +PCV, +both, with SHARMAT conditions.
+4. Coexistence matrix (§2a): all 8 combinations of MP, PCV and SHARMAT present/absent,
+   on the test clone. Each run checks: our plugin works; the others' behaviour, logs and
+   persisted data are unchanged versus a run without Sworn & Scorned; SHARMAT condition
+   prompts are intact in the composed prompt; no PHP errors or name clashes.
 5. In-game: surfacing compliance, chat overhead (~0), queue lag, repetition.
 
 ## 11. To verify before or during implementation
