@@ -53,6 +53,18 @@ function localHandoffUrl(array $server, array $query): ?string
     return $scheme . '://localhost' . ($port === $defaultPort ? '' : ':' . $port) . $script . ($queryString === '' ? '' : '?' . $queryString);
 }
 
+/** Trust server TLS state, never client forwarding headers. */
+function keySubmissionAllowed(array $server): bool
+{
+    if (!pageAccessAllowed($server)) {
+        return false;
+    }
+    $local = $server;
+    unset($local['REMOTE_USER']);
+    return pageAccessAllowed($local)
+        || (is_string($server['HTTPS'] ?? null) && $server['HTTPS'] !== '' && strtolower($server['HTTPS']) !== 'off');
+}
+
 function csrfTokenValid(string $sessionToken, mixed $submitted): bool
 {
     return preg_match('/\A[a-f0-9]{64}\z/D', $sessionToken) === 1

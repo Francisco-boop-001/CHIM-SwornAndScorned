@@ -93,10 +93,18 @@ function renderPage(array $model, string $csrf, ?string $notice): string
         $checked = in_array($npc['id'], $settings['cast'], true) ? ' checked' : '';
         $out .= '<label><input type="checkbox" name="cast[]" value="' . (int) $npc['id'] . '"' . $checked . '> ' . h((string) $npc['name']) . '</label>';
     }
-    $out .= '</div></fieldset><button type="submit">Save settings</button></form>'
-        . '<form method="post" class="key">' . csrfField($csrf) . '<input type="hidden" name="action" value="set_key">'
-        . '<p>' . (!empty($settings['has_key']) ? 'Key saved (hidden).' : 'No key: the CHIM LLM fallback is used when available.') . '</p>'
-        . '<label>OpenRouter key <input type="password" name="api_key" autocomplete="new-password"></label><button type="submit">Save key</button></form>';
+    $out .= '</div></fieldset><button type="submit">Save settings</button></form>';
+    if (!empty($settings['key_error'])) {
+        $out .= '<p class="notice">Saved key unavailable; evaluations blocked. Restore the private master key, or remove the saved key and provision storage before replacing it.</p>';
+    } else {
+        $out .= '<p>' . (!empty($settings['has_key']) ? 'Key saved (encrypted, hidden).' : 'No key: the CHIM LLM fallback is used when available.') . '</p>';
+    }
+    if (($model['key_submission_allowed'] ?? false) === true) {
+        $out .= '<form method="post" class="key">' . csrfField($csrf) . '<input type="hidden" name="action" value="set_key">'
+            . '<label>OpenRouter key <input type="password" name="api_key" autocomplete="new-password"></label><button type="submit">Save key</button></form>';
+    } else {
+        $out .= '<p>Use HTTPS or direct localhost to save a key.</p>';
+    }
     if (!empty($settings['has_key'])) {
         $out .= '<form method="post">' . csrfField($csrf) . '<input type="hidden" name="action" value="clear_key"><button type="submit">Remove key</button></form>';
     }

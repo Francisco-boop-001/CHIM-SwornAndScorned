@@ -10,11 +10,13 @@
 # Only the sanitised acceptance summary is public.
 /docs/verification/*
 !/docs/verification/release-0.1.1.md
+!/docs/verification/key-encryption-0.1.2.md
 
 # Local credentials, editor files and Python caches.
 .env
 .env.*
 *.local
+*.key
 __pycache__/
 *.py[cod]
 .DS_Store

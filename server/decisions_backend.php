@@ -11,7 +11,7 @@ const OPENROUTER_DECISIONS_URL = 'https://openrouter.ai/api/alpha/decisions';
 final class OpenRouterDecisionBackend implements DecisionBackend
 {
     /** @param callable(string, list<string>, string): array{status: int, body: string} $transport */
-    public function __construct(private string $apiKey, private string $model, private $transport)
+    public function __construct(#[\SensitiveParameter] private string $apiKey, private string $model, private $transport)
     {
     }
 
@@ -133,7 +133,7 @@ function answersFromDecisions(array $questions, mixed $answers): array
 /** Production HTTP transport with fixed, bounded failures. */
 function curlTransport(int $timeoutSeconds = 15): callable
 {
-    return static function (string $url, array $headers, string $body) use ($timeoutSeconds): array {
+    return static function (string $url, #[\SensitiveParameter] array $headers, string $body) use ($timeoutSeconds): array {
         $handle = curl_init($url);
         if ($handle === false) {
             throw new DecisionBackendError('transport_failed', true);

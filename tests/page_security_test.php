@@ -4,7 +4,7 @@ declare(strict_types=1);
 require __DIR__ . '/support/check.php';
 require __DIR__ . '/../server/page_security.php';
 
-use function ChimSwornAndScorned\{csrfTokenValid, localHandoffUrl, pageAccessAllowed, sessionCookieOptions};
+use function ChimSwornAndScorned\{csrfTokenValid, keySubmissionAllowed, localHandoffUrl, pageAccessAllowed, sessionCookieOptions};
 
 check(pageAccessAllowed(['REMOTE_ADDR' => '127.0.0.1']), 'IPv4 loopback allowed');
 check(pageAccessAllowed(['REMOTE_ADDR' => '::1']), 'IPv6 loopback allowed');
@@ -32,5 +32,12 @@ $cookie = sessionCookieOptions(['HTTPS' => 'on']);
 check($cookie['httponly'] === true && $cookie['secure'] === true && $cookie['samesite'] === 'Strict', 'HTTPS session cookie is protected');
 $cookie = sessionCookieOptions([]);
 check($cookie['httponly'] === true && $cookie['secure'] === false && $cookie['samesite'] === 'Strict', 'HTTP session cookie remains HttpOnly and SameSite');
+
+check(keySubmissionAllowed(['REMOTE_ADDR' => '127.0.0.1']), 'direct localhost key entry allowed');
+check(keySubmissionAllowed(['REMOTE_ADDR' => '10.0.0.5', 'REMOTE_USER' => 'admin', 'HTTPS' => 'on']), 'authenticated HTTPS key entry allowed');
+check(!keySubmissionAllowed(['REMOTE_ADDR' => '10.0.0.5', 'REMOTE_USER' => 'admin']), 'remote HTTP key entry refused');
+check(!keySubmissionAllowed(['REMOTE_ADDR' => '127.0.0.1', 'REMOTE_USER' => 'admin', 'HTTP_X_FORWARDED_FOR' => '10.0.0.9']), 'proxied localhost HTTP key entry refused');
+check(!keySubmissionAllowed(['REMOTE_ADDR' => '10.0.0.5', 'REMOTE_USER' => 'admin', 'HTTP_X_FORWARDED_PROTO' => 'https']), 'client HTTPS header cannot authorize key entry');
+check(!keySubmissionAllowed(['REMOTE_ADDR' => '10.0.0.5', 'HTTPS' => 'on']), 'HTTPS alone does not authorize page access');
 
 echo "page security checks passed\n";

@@ -19,8 +19,11 @@ const SCAN_LIMIT = 500;
 const LEASE_SECONDS = 120;
 
 /** Read new speech rows, emit settled per-perspective jobs, advance the cursor. Returns jobs created. */
-function scanOnce(Pg $pg, array $playthrough, array $settings, int $now): int
+function scanOnce(Pg $pg, array $playthrough, #[\SensitiveParameter] array $settings, int $now): int
 {
+    if (!empty($settings['_key_error'])) {
+        throw new KeyStorageError();
+    }
     $pt = $playthrough['id'];
     $cursorTable = sasTable('cursor');
     $cursorRow = $pg->one("SELECT last_rowid FROM {$cursorTable} WHERE playthrough_id = $1", [$pt]);
@@ -135,7 +138,7 @@ final class PgJobDeps implements JobDeps
         private Pg $pg,
         private PerspectiveStore $store,
         private array $playthrough,
-        private array $settings,
+        #[\SensitiveParameter] private array $settings,
         private $transport,
         private $completion
     ) {
@@ -180,6 +183,9 @@ final class PgJobDeps implements JobDeps
 
     public function backend(string $kind): ?array
     {
+        if (!empty($this->settings['_key_error'])) {
+            throw new KeyStorageError();
+        }
         if ($kind === 'decisions') {
             return $this->settings['api_key'] === ''
                 ? null
@@ -198,8 +204,11 @@ final class PgJobDeps implements JobDeps
 }
 
 /** One worker iteration: scan, then process at most one job. Returns whether a job ran. */
-function workerTick(Pg $pg, array $settings, int $now, ?callable $transport = null, ?callable $completion = null): bool
+function workerTick(Pg $pg, #[\SensitiveParameter] array $settings, int $now, ?callable $transport = null, ?callable $completion = null): bool
 {
+    if (!empty($settings['_key_error'])) {
+        throw new KeyStorageError();
+    }
     $playthrough = currentPlaythrough($pg);
     if ($playthrough === null) {
         return false;

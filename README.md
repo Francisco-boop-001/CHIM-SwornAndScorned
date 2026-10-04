@@ -22,19 +22,21 @@ It does not set Skyrim relationship ranks, complete quests, transfer items, or g
 
 ## Install: pick one route
 
+**0.1.2 adds encrypted storage for this plugin's saved OpenRouter key.** Install the new version and provision its private master key as described below. Older **0.1.1 packages store saved keys as plaintext**; downloading an update does not change the installed server copy.
+
 This is a **CHIM server extension** using CHIM's existing client. It adds no ESP/ESL, Papyrus companion, or Skyrim plugin slot. You need CHIM support for server-plugin packages, the conversation evidence/hooks this plugin uses, and PHP CLI worker execution on the server. The [verification record](docs/verification/release-0.1.1.md) identifies the tested server; this is not a claim that every historical CHIM build supports it.
 
 | Route | Download | What to do |
 | --- | --- | --- |
-| **MO2** | [MO2 ZIP](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.1/sworn_and_scorned-0.1.1-mo2.zip) | Import as a mod, enable it, and let a compatible CHIM client sync the embedded server package. |
-| **Plugin Manager upload** | [DWPkg](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.1/sworn_and_scorned-0.1.1.dwpkg) | Upload through CHIM's Plugin Manager. This route was tested on the disposable server. |
-| **Repository installer** | [Tar archive](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.1/sworn_and_scorned.tar.gz) | Separate installer format: one `sworn_and_scorned/` wrapper directory is stripped during installation. This candidate's catalog-style installation was not exercised. |
+| **MO2** | [MO2 ZIP](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.2/sworn_and_scorned-0.1.2-mo2.zip) | Import as a mod, enable it, and let a compatible CHIM client sync the embedded server package. |
+| **Plugin Manager upload** | [DWPkg](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.2/sworn_and_scorned-0.1.2.dwpkg) | Upload through CHIM's Plugin Manager. The installation route was exercised for 0.1.1; 0.1.2 has package and isolated runtime checks. |
+| **Repository installer** | [Tar archive](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.2/sworn_and_scorned.tar.gz) | Separate installer format: one `sworn_and_scorned/` wrapper directory is stripped during installation. Catalog-style installation was not exercised. |
 
-[SHA-256 checksums](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.1/SHA256SUMS.txt) · [Release notes](distribution/sworn_and_scorned-v0.1.1.md)
+[SHA-256 checksums](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.2/SHA256SUMS.txt) · [Release notes](distribution/sworn_and_scorned-v0.1.2.md)
 
-The MO2 archive puts `CHIM/server-plugins/sworn_and_scorned/0.1.1.dwpkg` directly under the virtual Data root. **Do not unpack the inner DWPkg into Data.** MO2 may warn that this server-only mod has no recognised game content; it genuinely contains no ESP. No ceremonial dummy plugin has been sacrificed to appease it.
+The MO2 archive puts `CHIM/server-plugins/sworn_and_scorned/0.1.2.dwpkg` directly under the virtual Data root. **Do not unpack the inner DWPkg into Data.** MO2 may warn that this server-only mod has no recognised game content; it genuinely contains no ESP. No ceremonial dummy plugin has been sacrificed to appease it.
 
-**Use one installation source and one enabled version.** Replace an older enabled package rather than stacking versions or letting an old sync package compete with a Plugin Manager update. After installation, verify **0.1.1 in the server's Plugin Manager**, then open **Plugin Page**. A download filename is not running-code evidence. MO2 layout and embedded bytes were verified; automatic MO2-to-server transfer remains untested. No official CHIM catalog listing has been submitted.
+**Use one installation source and one enabled version.** Replace an older enabled package rather than stacking versions or letting an old sync package compete with a Plugin Manager update. After installation, verify **0.1.2 in the server's Plugin Manager**, then open **Plugin Page**. A download filename is not running-code evidence. MO2 layout and embedded bytes were verified; automatic MO2-to-server transfer remains untested. No official CHIM catalog listing has been submitted.
 
 ## Setup: nominate your disasters
 
@@ -52,6 +54,16 @@ The MO2 archive puts `CHIM/server-plugins/sworn_and_scorned/0.1.1.dwpkg` directl
 | Leave the plugin key empty | CHIM's configured relationship LLM connector, when enabled and using **`openrouterjson`** or **`openrouterjsoncached`**. Other drivers are unsupported by this fallback. |
 
 **The package ships no API key.** Installation does not automatically activate Jev. Without a plugin key, the supported CHIM connector selects the model. The test server used `google/gemma-4-31b-it`; Gemma is not a bundled requirement.
+
+**Before saving a plugin key on 0.1.2**, an administrator must provision its private master key once. On the Linux CHIM server, with PHP sodium and POSIX available:
+
+```sh
+sudo php /var/www/html/HerikaServer/ext/sworn_and_scorned/provision_key.php
+```
+
+Adjust the plugin location if your server lives elsewhere. This creates **`/var/lib/chim-secrets/sworn_and_scorned.key`**, outside the web root and database: 32 random bytes, owned by `www-data`, file mode `0600`, directory mode `0700`. The helper targets CHIM's `www-data` service account and refuses to overwrite an existing key. An installation with a different PHP/worker account needs its administrator to create the same private layout owned by that account. The web process and CLI worker must use the same master key; optional `CHIM_SWORN_SCORNED_KEY_FILE` must be an absolute private path configured consistently for both.
+
+Existing plaintext plugin keys migrate on the first settings load after provisioning, before they can be used. If migration cannot persist, or the master key is missing, insecure or wrong, evaluation is blocked rather than quietly using another backend. The dashboard remains available to restore the master key or remove/replace the saved key. No need to interrogate the llama with a soldering iron.
 
 Transient failures retry after **30 seconds, 2 minutes and 10 minutes**. After the Decisions retry budget, an available supported CHIM fallback is attempted. Exhausted/unrecoverable jobs stay visible as failed. The page shows pending/running/failed counts and fixed failure codes. If Jev has no permitted provider, check whether your OpenRouter account allows Typesafe; the plugin cannot override that policy. Provider calls, retries and fallback can incur charges.
 
@@ -122,9 +134,13 @@ Structured JSON entries use CHIM's logger, normally **`<HerikaServer>/log/chim.l
 
 **Plugin logs omit raw dialogue, prompts, provider responses and credentials.** CHIM core can log full prompts; providers receive the conversation evidence needed for evaluation. Their retention is outside this plugin. This is not a private-conversation vault wearing a llama sticker.
 
-Saved keys go to OpenRouter over HTTPS, are never prefilled on the page, and are **stored unencrypted in CHIM's database**. Administrators, backups, compromised server code or other code with database access can expose them. Use a dedicated spending-limited key. Page access requires exact localhost without forwarded headers or a server-authenticated user; mutations use CSRF protection. Remote key submission needs HTTPS configured on your server; this release does not enforce that transport itself.
+On **0.1.2**, saved plugin keys use authenticated **libsodium secretbox** encryption with a fresh random nonce on every save. The database contains a versioned ciphertext envelope, while the master key stays in the separate private file above. Keys are never prefilled on the page. Provider requests use HTTPS. Page access requires exact localhost without forwarded headers or a server-authenticated user; mutations use CSRF protection. Remote key entry additionally requires HTTPS recognised by the web server. Direct localhost HTTP remains available for local setup; client-supplied forwarded-protocol headers cannot authorise key entry. TLS-terminating proxies must configure trustworthy server HTTPS state.
 
-**Clear key** removes the plugin's saved key and returns to an available CHIM fallback. It does not revoke the key at OpenRouter or erase historical backups. Better secret storage and remote transport handling are tracked for the next version, not quietly claimed as features of this one.
+**This protects a database-only leak**, not a compromised server. Root, the PHP service account and compromised code running as that account can access a key while it is used. A backup containing both the database and master key can decrypt it. CHIM's own fallback connector credentials retain CHIM's existing storage; this change covers the key saved by this plugin. Use a dedicated spending-limited key.
+
+**Back up the master key separately and securely from the database.** Losing it means replacing the saved API key; creating a new master does not recover old ciphertext. Do not rotate the master file blindly. **Clear key** removes the current plugin setting and returns to an available CHIM fallback; it neither revokes the key at OpenRouter nor erases old backups, WAL or historical plaintext copies. Rotate a previously exposed provider key yourself. Encryption is useful; retroactive amnesia is still outside the budget.
+
+[0.1.2 security verification](docs/verification/key-encryption-0.1.2.md): real crypto/filesystem tests, encrypted-save and migration integration, recovery controls, HTTPS gates and independent review. Administrators choosing a custom master path must keep it outside **every** served directory, including nonstandard web roots.
 
 ## Tested, and not magically tested
 

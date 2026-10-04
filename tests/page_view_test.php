@@ -41,8 +41,15 @@ $model = [
     ]],
     'director' => false,
     'art' => false,
+    'key_submission_allowed' => true,
 ];
 $csrf = str_repeat('a', 64);
+$blocked = $model;
+$blocked['key_submission_allowed'] = false;
+$blocked['settings']['key_error'] = true;
+$blockedHtml = renderPage($blocked, $csrf, null);
+check(!str_contains($blockedHtml, 'name="api_key"') && !str_contains($blockedHtml, 'value="set_key"'), 'remote HTTP page has no key-entry form');
+check(str_contains($blockedHtml, 'HTTPS') && str_contains($blockedHtml, 'master key') && str_contains($blockedHtml, 'value="clear_key"'), 'recovery guidance and removal remain available');
 $html = renderPage($model, $csrf, 'Settings saved.');
 
 check(str_contains($html, '&lt;script&gt;x&lt;/script&gt;') && !str_contains($html, '<script>x</script>'), 'NPC names are escaped');

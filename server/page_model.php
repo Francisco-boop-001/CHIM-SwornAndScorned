@@ -186,7 +186,9 @@ function buildPageModel(Pg $pg, string $engineRoot, bool $director): array
     unset($entry);
 
     $backend = ['status' => 'No backend available', 'model' => ''];
-    if ($settings['api_key'] !== '') {
+    if ($settings['_key_error'] !== null) {
+        $backend['status'] = 'Key storage unavailable; evaluations blocked';
+    } elseif ($settings['api_key'] !== '') {
         $backend = ['status' => 'Decisions API configured', 'model' => $settings['model']];
     } else {
         try {
@@ -206,7 +208,8 @@ function buildPageModel(Pg $pg, string $engineRoot, bool $director): array
             'enabled' => $settings['enabled'],
             'cast' => $cast,
             'model' => $settings['model'],
-            'has_key' => $settings['api_key'] !== '',
+            'has_key' => $settings['_key_present'],
+            'key_error' => $settings['_key_error'] !== null,
         ],
         'backend' => $backend,
         'npcs' => $npcs,

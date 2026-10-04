@@ -6,6 +6,7 @@ namespace ChimSwornAndScorned;
 use UnexpectedValueException;
 
 require_once __DIR__ . '/pg.php';
+require_once __DIR__ . '/key_crypto.php';
 
 const DEFAULT_SETTINGS = ['enabled' => false, 'cast' => [], 'model' => 'typesafe/jev-1.13', 'api_key' => ''];
 const MAX_CAST = 8;
@@ -85,18 +86,67 @@ function normalizeSettings(array $settings): array
 function loadSettings(Pg $pg): array
 {
     $settings = DEFAULT_SETTINGS;
+    $keyJson = null;
     foreach ($pg->all('SELECT key, value::text AS value FROM ' . sasTable('settings')) as $row) {
         if (array_key_exists($row['key'], DEFAULT_SETTINGS)) {
             $settings[$row['key']] = json_decode((string) $row['value'], true);
+            if ($row['key'] === 'api_key') {
+                $keyJson = (string) $row['value'];
+            }
         }
     }
-    return normalizeSettings($settings);
+    $stored = $settings['api_key'];
+    $settings['api_key'] = '';
+    $settings = normalizeSettings($settings);
+    $settings['_key_present'] = $stored !== '';
+    $settings['_key_error'] = null;
+    try {
+        // Migrate a legacy string before returning it to any backend. The revision
+        // fingerprint prevents overwriting a concurrent clear or replacement.
+        for ($attempt = 0; $attempt < 3; ++$attempt) {
+            if ($stored === '') {
+                return $settings;
+            }
+            if (!is_string($stored)) {
+                $settings['api_key'] = openApiKey($stored);
+                return $settings;
+            }
+            $plain = trim($stored);
+            $sealed = sealApiKey($plain);
+            $updated = $pg->one(
+                'UPDATE ' . sasTable('settings') . " SET value=$1::jsonb WHERE key='api_key' AND md5(value::text)=$2 RETURNING key",
+                [json_encode($sealed, JSON_FLAGS), md5((string) $keyJson)]
+            );
+            if ($updated !== null) {
+                $settings['api_key'] = $plain;
+                return $settings;
+            }
+            $row = $pg->one('SELECT value::text AS value FROM ' . sasTable('settings') . " WHERE key='api_key'");
+            $keyJson = $row['value'] ?? null;
+            $stored = $keyJson === null ? '' : json_decode($keyJson, true);
+            $settings['_key_present'] = $stored !== '';
+        }
+        throw new KeyStorageError();
+    } catch (\Throwable) {
+        // A denied migration write must not reveal the legacy key or take the
+        // otherwise-readable dashboard away. Subsequent DB errors stay fatal.
+        $settings['_key_error'] = 'key_storage_unavailable';
+        return $settings;
+    }
 }
 
-function saveSetting(Pg $pg, string $key, mixed $value): void
+function saveSetting(Pg $pg, string $key, #[\SensitiveParameter] mixed $value): void
 {
     if (!array_key_exists($key, DEFAULT_SETTINGS)) {
         throw new UnexpectedValueException('setting_unknown');
+    }
+    if ($key === 'api_key') {
+        if (!is_string($value)) {
+            throw new UnexpectedValueException('key_invalid');
+        }
+        if ($value !== '') {
+            $value = sealApiKey(trim($value));
+        }
     }
     $pg->exec(
         'INSERT INTO ' . sasTable('settings') . ' (key, value) VALUES ($1, $2::jsonb)

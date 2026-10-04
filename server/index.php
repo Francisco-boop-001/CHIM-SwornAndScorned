@@ -82,7 +82,15 @@ if ($method === 'POST') {
     } else {
         try {
             $action = parsePageAction($_POST, knownNpcIds($pg));
-            $notice = performPageAction($pg, $action, $engineRoot, __DIR__);
+            if ($action['action'] === 'set_key' && !keySubmissionAllowed($_SERVER)) {
+                http_response_code(403);
+                $notice = 'Use HTTPS or direct localhost to save a key.';
+            } else {
+                $notice = performPageAction($pg, $action, $engineRoot, __DIR__);
+            }
+        } catch (KeyStorageError) {
+            http_response_code(503);
+            $notice = 'Key storage unavailable. Provision or restore the private master key before saving a key.';
         } catch (\UnexpectedValueException) {
             http_response_code(400);
             $notice = 'That request was not valid.';
@@ -94,6 +102,7 @@ if ($method === 'POST') {
 
 try {
     $model = buildPageModel($pg, $engineRoot, ($_GET['view'] ?? '') === 'director');
+    $model['key_submission_allowed'] = keySubmissionAllowed($_SERVER);
     header('Content-Type: text/html; charset=UTF-8');
     echo renderPage($model, $csrf, $notice);
 } catch (\Throwable) {

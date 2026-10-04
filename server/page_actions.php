@@ -10,7 +10,7 @@ require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/launcher.php';
 
 /** @param list<int> $knownNpcIds */
-function parsePageAction(array $post, array $knownNpcIds): array
+function parsePageAction(#[\SensitiveParameter] array $post, array $knownNpcIds): array
 {
     $action = $post['action'] ?? null;
     if ($action === 'save_settings') {
@@ -92,7 +92,7 @@ function issueFlagMutation(string $issueId, string $flag): callable
 }
 
 /** Perform a validated action and return only a fixed, safe notice. */
-function performPageAction(Pg $pg, array $action, string $engineRoot, string $pluginDir): string
+function performPageAction(Pg $pg, #[\SensitiveParameter] array $action, string $engineRoot, string $pluginDir): string
 {
     switch ($action['action']) {
         case 'save_settings':
