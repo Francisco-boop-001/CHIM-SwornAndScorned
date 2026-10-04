@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "seeds": [
+    {"id":"olfrid-eorlund-friendship","owner":"Olfrid Battle-Born","counterpart":"Eorlund Gray-Mane","wants":"unknown","paraphrase":"Eorlund turned his back on the Emperor, ending our friendship.","source":"https://en.uesp.net/wiki/Skyrim:Olfrid_Battle-Born"},
+    {"id":"olfrid-vignar-feud","owner":"Olfrid Battle-Born","counterpart":"Vignar Gray-Mane","wants":"unknown","paraphrase":"Vignar scorns my loyalty to the Empire and threatens my family when the Stormcloaks take Whiterun.","source":"https://en.uesp.net/wiki/Skyrim:Olfrid_Battle-Born"},
+    {"id":"vignar-olfrid-feud","owner":"Vignar Gray-Mane","counterpart":"Olfrid Battle-Born","wants":"unknown","paraphrase":"Olfrid threatens to seize my property through the Thalmor; his money will not protect him forever.","source":"https://en.uesp.net/wiki/Skyrim:Olfrid_Battle-Born"},
+    {"id":"fralia-olfrid-thorald","owner":"Fralia Gray-Mane","counterpart":"Olfrid Battle-Born","wants":"explanation","paraphrase":"Olfrid mocks Thorald's disappearance and threatens me. I need to know where my son is.","source":"https://en.uesp.net/wiki/Skyrim:Olfrid_Battle-Born"},
+    {"id":"fralia-idolaf-thorald","owner":"Fralia Gray-Mane","counterpart":"Idolaf Battle-Born","wants":"explanation","paraphrase":"Idolaf tells me to accept Thorald's loss. I believe my son lives and want the truth.","source":"https://en.uesp.net/wiki/Skyrim:Olfrid_Battle-Born"},
+    {"id":"elisif-ulfric-torygg","owner":"Elisif the Fair","counterpart":"Ulfric Stormcloak","wants":"unknown","paraphrase":"Ulfric killed Torygg and his rebellion makes Skyrim suffer. I want this war ended and justice for my husband.","source":"https://en.uesp.net/wiki/Skyrim:Elisif_the_Fair"},
+    {"id":"erandur-vaermina-nightmares","owner":"Erandur","counterpart":"daedra:vaermina","wants":"unknown","paraphrase":"Vaermina torments Dawnstar with nightmares. I must end her hold on its people.","source":"https://en.uesp.net/wiki/Skyrim:Erandur"},
+    {"id":"logrolf-molag-bal-shrine","owner":"Logrolf the Willful","counterpart":"daedra:molag_bal","wants":"unknown","paraphrase":"I defy Molag Bal by dedicating his altar to Boethiah. He has failed to stop me before.","source":"https://en.uesp.net/wiki/Skyrim:Logrolf_the_Willful"},
+    {"id":"carlotta-mikael-harassment","owner":"Carlotta Valentia","counterpart":"Mikael","wants":"unknown","paraphrase":"Mikael boasts that he will conquer me. I want him to leave me alone so I can raise my daughter.","source":"https://en.uesp.net/wiki/Skyrim:Carlotta_Valentia"},
+    {"id":"lars-braith-bullying","owner":"Lars Battle-Born","counterpart":"Braith","wants":"unknown","paraphrase":"Braith demands my money and threatens to hit me. I want her to stop bullying me.","source":"https://en.uesp.net/wiki/Skyrim:Lars_Battle-Born"}
+  ]
+}

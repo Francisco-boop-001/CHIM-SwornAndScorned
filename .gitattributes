@@ -1,0 +1,6 @@
+* text=auto eol=lf
+# Preserve reviewed/tested payload and fixture bytes in clean-tag builds.
+server/** -text
+tests/** -text
+*.webp binary
+*.png binary

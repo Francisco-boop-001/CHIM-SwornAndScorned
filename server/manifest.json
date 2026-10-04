@@ -1,0 +1,24 @@
+{
+  "name": "sworn_and_scorned",
+  "version": "0.1.1",
+  "schema_version": 2,
+  "git_repo": "Francisco-boop-001/CHIM-SwornAndScorned",
+  "description": "PRE-ALPHA: Persistent grievances and promises between NPCs and the player, judged asynchronously by a decision model and surfaced quietly in conversation. Opt-in.",
+  "status": "development_candidate",
+  "config_url": "../ext/sworn_and_scorned/index.php?local=1",
+  "default_channel": "candidate",
+  "channels": {
+    "candidate": {
+      "label": "PRE-ALPHA development candidate",
+      "branch": "main",
+      "package_source": "release",
+      "manifest_url": "https://raw.githubusercontent.com/Francisco-boop-001/CHIM-SwornAndScorned/main/server/manifest.json",
+      "package_urls": [
+        "https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v<version>/sworn_and_scorned.tar.gz"
+      ],
+      "archive_strip_components": 1,
+      "allow_force": false
+    }
+  },
+  "server_compatibility_reference": "Installed HerikaServer source identity: main.php sha256 ef2ff9a50203820ca5416f334504f352793ee5413053e3b7beee1a222c8e721b; deployed revision unverified"
+}

@@ -1,0 +1,21 @@
+# Local execution evidence, backups, screenshots and planning ledger.
+/tasks/
+/AGENTS.md
+/docs/superpowers/
+/docs/art/
+
+# Release assets are uploaded separately from source.
+/dist/
+
+# Only the sanitised acceptance summary is public.
+/docs/verification/*
+!/docs/verification/release-0.1.1.md
+
+# Local credentials, editor files and Python caches.
+.env
+.env.*
+*.local
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db
