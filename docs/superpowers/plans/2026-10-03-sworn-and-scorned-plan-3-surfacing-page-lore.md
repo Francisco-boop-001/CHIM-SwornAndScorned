@@ -1323,7 +1323,7 @@ function renderPage(array $model, string $csrf, ?string $notice): string
         . '<title>Sworn &amp; Scorned</title><link rel="stylesheet" href="assets/style.css"></head><body><main>';
     $out .= '<header><h1>Sworn &amp; Scorned</h1><p class="subtitle">Part of the World of Drama-Llama</p></header>';
     if ($model['art']) {
-        $out .= '<img class="art" src="assets/sworn-and-scorned.webp" alt="A Nord offers an open hand on snowy mead-hall steps; a woman above him turns away; a snapped oath ring lies between them.">';
+        $out .= '<img class="art" src="dashboard-art.webp" alt="A Nord offers an open hand on snowy mead-hall steps; a woman above him turns away; a snapped oath ring lies between them.">';
     }
     if ($notice !== null) {
         $out .= '<p class="notice" role="status">' . h($notice) . '</p>';
@@ -1442,7 +1442,7 @@ function buildPageModel(Pg $pg, string $engineRoot, bool $director): array
         'worker' => ['alive' => workerPidAlive($engineRoot . '/log/sworn_scorned_worker.pid'), 'jobs' => $jobs, 'errors' => $errors],
         'journal' => $journal,
         'director' => $director,
-        'art' => is_file(__DIR__ . '/assets/sworn-and-scorned.webp'),
+        'art' => is_file(__DIR__ . '/dashboard-art.webp'),
     ];
 }
 ```
@@ -1549,6 +1549,7 @@ In `scripts/build-package.py`, add these entries to `SERVER_FILES`:
 
 ```python
     "assets/style.css",
+    "dashboard-art.webp",
     "hook.php",
     "index.php",
     "lore.php",
@@ -1559,7 +1560,7 @@ In `scripts/build-package.py`, add these entries to `SERVER_FILES`:
     "page_view.php",
 ```
 
-When the user supplies the artwork (`docs/art/hero-image-prompt.md`), convert it to `server/assets/sworn-and-scorned.webp` and add `"assets/sworn-and-scorned.webp",` too. The page shows it only if the file exists.
+The artwork already exists: source `assets/dashboard-art-source.png`, runtime `server/dashboard-art.webp` (see `docs/art/dashboard-art-generation.md`). Commit both with this task if they are still untracked. The page shows the image only if the file exists.
 
 - [ ] **Step 9: Lint, run the full unit suite and the package check**
 
@@ -1573,7 +1574,7 @@ Expected: all pass.
 - [ ] **Step 10: Commit**
 
 ```bash
-git -c safe.directory='*' add server/page_model.php server/page_view.php server/index.php server/assets/style.css scripts/build-package.py tests/page_view_test.php
+git -c safe.directory='*' add server/page_model.php server/page_view.php server/index.php server/assets/style.css server/dashboard-art.webp assets/dashboard-art-source.png scripts/build-package.py tests/page_view_test.php
 git -c safe.directory='*' commit -m "Add the director page: settings, key, worker panel, spoiler-safe journal"
 ```
 
