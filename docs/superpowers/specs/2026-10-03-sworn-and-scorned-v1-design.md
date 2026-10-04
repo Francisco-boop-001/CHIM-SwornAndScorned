@@ -275,3 +275,33 @@ Vector index for long-term recall (v2: derived, rebuildable, pgvector if availab
 filtered by pair and playthrough first); "Who Told You That?" (needs MP provenance);
 Taking Sides, Confidences, Jealousy, Public Face; faction-level stances; NPC-initiated
 openers; latecomers; generic undo; additional decision-provider adapters.
+
+## 13. Amendment A (2026-10-03, while writing Plans 0–3)
+
+Research of CHIM upstream (`HerikaServer` dev), Mind Poisoning and Private Conversation
+changed these details. The design intent is unchanged.
+
+1. **Capture by eventlog scan instead of an ACK hook (replaces §5 step 1).** The worker reads
+   new `eventlog` rows by `rowid` (`type` `chat` with `delivery_state = 'spoken'`, plus player
+   `inputtext*`), groups them per perspective (owner in cast, counterpart) and inserts a job
+   when the group settles. Reasons: no code on the `_speech` path (cannot disturb MP's ACK
+   handling); player input is covered without request correlation; CHIM deletes eventlog rows
+   at or after the loaded game time on `init`, so a reload removes the evidence and the
+   commit-time check "all source rows still exist" rejects stale jobs. A per-perspective mark
+   prevents a line from entering two jobs.
+2. **Tables live in the `plugins` schema** (`plugins.sworn_scorned_*`), created idempotently
+   by the worker (CHIM's guide: plugin tables in `plugins`, prefixed).
+3. **Decision backend endpoint:** `POST https://openrouter.ai/api/alpha/decisions`
+   (`questions` is a map id → `{type, instructions, criteria}`; noul answers `{noul: p_true}`;
+   choice answers `{choice, probabilities}`).
+4. **Prompt injection:** `chimRegisterPromptInjection('character_bottom', 'sworn_and_scorned',
+   $note, 900)` from `context_pre.php` (renders inside `<character>`; unaffected by PCV's
+   replacement of the nearby-actors section). Presence comes from `$GLOBALS['CACHE_PEOPLE']`,
+   which PCV narrows to scene members before our hook runs (alphabetical order).
+5. **Locks:** our own advisory key range (`1002000000 + npc id`) serialises our writers only;
+   cross-plugin safety comes from the row lock (`FOR UPDATE`), so MP's non-blocking advisory
+   lock never reports "busy" because of us.
+6. **History snapshots** use `_chim_history_source = 'relationship'` (whitelisted by CHIM;
+   restore ranks it highest), as MP does.
+7. **Opt-in:** the plugin is disabled until enabled on its page; the worker starts only when
+   enabled and exits when disabled, uninstalled, or the database stays unavailable.

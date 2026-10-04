@@ -8,11 +8,13 @@ working, tested software on its own.
 | Plan | Scope | Status |
 | --- | --- | --- |
 | **1. Domain core** | Pure PHP, no CHIM: ledger, transitions, witness filter, decision-backend contract and policies, questions, evaluator, apply rules (idempotent lifecycle affinity, links, caps), surfacing selection and note rendering. Spec §4.1, §6.2–6.4, §7.1 (selection/render), parts of §2a. | `2026-10-03-sworn-and-scorned-plan-1-domain-core.md` |
-| **0. Clone verification** | Spikes on `DwemerAI4Skyrim3-test` only. Answers spec §11 plus items found while writing Plan 1 (below). Produces a findings doc, no product code. | To write after Plan 1 |
-| **2. CHIM integration** | Manifest and packaging; `_speech` ACK capture and the `sworn_scorned_jobs` table; worker daemon (claim, lease, settle window, retries); store (locks, `jsonb_set`, relative affinity, history snapshot, revalidation); OpenRouter Decisions adapter and CHIM LLM fallback adapter; settings. | After Plan 0 |
-| **3. Surfacing, page, lore** | Context hook wiring and `sworn_scorned_pacing`; director page (settings, cast, worker panel, journal, dismiss/mute); lore seed format, validator and lazy application; UESP-sourced seed list (research task); 8-combination coexistence matrix on the clone. | After Plan 2 |
+| **0. Clone verification** | Confirms on the installed CHIM (clone only) what upstream research found (spec Amendment A). Produces a findings doc, no product code. | `2026-10-03-sworn-and-scorned-plan-0-clone-verification.md` |
+| **2. CHIM integration** | Manifest and packaging; eventlog scanner and `plugins.sworn_scorned_*` tables; worker daemon (claim, lease, settle window, retries, chronology); store (locks, `jsonb_set`, relative affinity, history snapshot, revalidation); OpenRouter Decisions adapter and CHIM LLM fallback adapter; settings. | `2026-10-03-sworn-and-scorned-plan-2-chim-integration.md` |
+| **3. Surfacing, page, lore** | Context hook wiring and `sworn_scorned_pacing`; director page (settings, cast, worker panel, journal, dismiss/mute); lore seed format, validator and lazy application; UESP-sourced seed list (research task); 8-combination coexistence matrix on the clone. | `2026-10-03-sworn-and-scorned-plan-3-surfacing-page-lore.md` |
 
-## Plan 0 questions (collected so far)
+## Plan 0 questions (upstream answers in spec Amendment A; Plan 0 confirms them on the installed version)
+
+Order of execution: Plan 1 → Plan 0 → Plan 2 → Plan 3.
 
 1. Does CHIM delete or keep "future" `eventlog` rows when a save is loaded? (stale-job check)
 2. `pcntl`/`posix` in the distro PHP; can a **plugin** daemon be started and stopped cleanly?
