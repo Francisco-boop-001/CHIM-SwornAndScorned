@@ -21,9 +21,8 @@ const LEASE_SECONDS = 120;
 /** Read new speech rows, emit settled per-perspective jobs, advance the cursor. Returns jobs created. */
 function scanOnce(Pg $pg, array $playthrough, #[\SensitiveParameter] array $settings, int $now): int
 {
-    if (!empty($settings['_key_error'])) {
-        throw new KeyStorageError();
-    }
+    if (workerPauseReason($settings) !== null) return 0;
+    if (array_key_exists('_cast_playthrough', $settings) && $settings['_cast_playthrough'] !== $playthrough['id']) return 0;
     $pt = $playthrough['id'];
     $cursorTable = sasTable('cursor');
     $cursorRow = $pg->one("SELECT last_rowid FROM {$cursorTable} WHERE playthrough_id = $1", [$pt]);
@@ -67,7 +66,7 @@ function scanOnce(Pg $pg, array $playthrough, #[\SensitiveParameter] array $sett
         $pg->exec(
             "INSERT INTO {$jobsTable} (playthrough_id, owner_npc_id, owner_name, counterpart_name, event_ids, backend)
              VALUES ($1, $2, $3, $4, $5::bigint[], $6) ON CONFLICT DO NOTHING",
-            [$pt, $job['owner_npc_id'], $job['owner_name'], $job['counterpart_name'], pgIntArray($job['event_ids']), $settings['api_key'] === '' ? 'llm' : 'decisions']
+            [$pt, $job['owner_npc_id'], $job['owner_name'], $job['counterpart_name'], pgIntArray($job['event_ids']), empty($settings['use_jev']) ? 'llm' : 'decisions']
         );
         $pg->exec(
             "INSERT INTO {$marksTable} AS m (playthrough_id, owner_npc_id, counterpart_name, last_rowid) VALUES ($1, $2, $3, $4)
@@ -115,6 +114,10 @@ function claimJob(Pg $pg, string $playthroughId): ?array
 function finishJob(Pg $pg, array $job, array $result, bool $fallbackAvailable): void
 {
     $jobs = sasTable('jobs');
+    if ($result['outcome'] === 'paused') {
+        $pg->exec("UPDATE {$jobs} SET status = 'pending', lease_until = NULL, next_attempt_at = now() + interval '30 seconds', last_error = $2 WHERE id = $1", [$job['id'], $result['reason']]);
+        return;
+    }
     if (in_array($result['outcome'], ['done', 'stale'], true)) {
         $pg->exec("DELETE FROM {$jobs} WHERE id = $1", [$job['id']]);
         return;
@@ -183,13 +186,11 @@ final class PgJobDeps implements JobDeps
 
     public function backend(string $kind): ?array
     {
-        if (!empty($this->settings['_key_error'])) {
-            throw new KeyStorageError();
-        }
         if ($kind === 'decisions') {
-            return $this->settings['api_key'] === ''
+            $key = decisionApiKey($this->settings);
+            return $key === null
                 ? null
-                : [new OpenRouterDecisionBackend($this->settings['api_key'], $this->settings['model'], $this->transport), POLICY_DECISION_MODEL];
+                : [new OpenRouterDecisionBackend($key, $this->settings['model'], $this->transport), POLICY_DECISION_MODEL];
         }
         $identity = relationshipConnectorIdentity();
         return relationshipConnectorAvailable() && $identity !== null
@@ -206,13 +207,12 @@ final class PgJobDeps implements JobDeps
 /** One worker iteration: scan, then process at most one job. Returns whether a job ran. */
 function workerTick(Pg $pg, #[\SensitiveParameter] array $settings, int $now, ?callable $transport = null, ?callable $completion = null): bool
 {
-    if (!empty($settings['_key_error'])) {
-        throw new KeyStorageError();
-    }
+    if (workerPauseReason($settings) !== null) return false;
     $playthrough = currentPlaythrough($pg);
     if ($playthrough === null) {
         return false;
     }
+    if (array_key_exists('_cast_playthrough', $settings) && $settings['_cast_playthrough'] !== $playthrough['id']) return false;
     $pg->exec('BEGIN');
     try {
         $created = scanOnce($pg, $playthrough, $settings, $now);

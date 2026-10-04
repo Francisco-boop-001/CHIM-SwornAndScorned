@@ -10,8 +10,9 @@ try {
     require_once __DIR__ . '/logging.php';
     $sasEngineRoot = realpath(__DIR__ . '/../..');
     if ($sasEngineRoot !== false && !workerPidAlive($sasEngineRoot . '/log/sworn_scorned_worker.pid')) {
-        if (loadSettings(sharedConnection())['enabled']) {
-            sasLog('worker_launch', 'info', ['status' => ensureWorkerRunning($sasEngineRoot, __DIR__)]);
+        $sasSettings = loadSettings(sharedConnection());
+        if (workerPauseReason($sasSettings) === null) {
+            sasLog('worker_launch', 'info', ['status' => ensureWorkerRunning($sasEngineRoot, __DIR__, $sasSettings)]);
         }
     }
 } catch (\Throwable) {

@@ -30,6 +30,7 @@ SERVER_FILES = (
     "ledger.php",
     "llm_backend.php",
     "llm_connector.php",
+    "llm_request.php",
     "logging.php",
     "manifest.json",
     "pg.php",

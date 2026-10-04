@@ -41,7 +41,16 @@ try {
     $settings = normalizeSettings(['enabled' => true, 'cast' => [900001], 'model' => 'typesafe/jev-1.13', 'api_key' => '']);
     $now = time();
 
+    $GLOBALS['NEVER_CLEAR_RELATIONSHIP_DATA'] = true;
+    check(scanOnce($pg, $pt, $settings, $now) === 0, 'restore pause does not scan');
+    check($pg->one('SELECT * FROM sas_it.sworn_scorned_cursor') === null, 'restore pause preserves an absent cursor');
+    check(!ChimSwornAndScorned\workerTick($pg, $settings, $now, static function (): never { throw new RuntimeException('provider must not run'); }), 'restore pause does not claim or call provider');
+    unset($GLOBALS['NEVER_CLEAR_RELATIONSHIP_DATA']);
+
     check(scanOnce($pg, $pt, $settings, $now) === 0, 'first scan only initialises the cursor');
+    $staleCast = $settings + ['_cast_playthrough' => 'old-profile'];
+    check(scanOnce($pg, $pt, $staleCast, $now) === 0, 'in-flight cast from another profile never scans');
+    check($pg->one('SELECT count(*) AS n FROM sas_it.sworn_scorned_cursor')["n"] === '1', 'in-flight profile mismatch never creates a new cursor');
     $e1 = $event('Farkas IT: I will stand with you. (talking to Lydia IT)', $now - 60);
     $e2 = $event('Lydia IT: You had better. (talking to Farkas IT)', $now - 50);
     check(scanOnce($pg, $pt, $settings, $now) === 1, 'one settled perspective job');
@@ -50,6 +59,12 @@ try {
     $job = claimJob($pg, 'pt-it');
     check($job !== null && $job['event_ids'] === [$e1, $e2] && $job['owner_npc_id'] === 900001 && $job['counterpart_name'] === 'Farkas IT', 'claimed job');
     check($job['backend'] === 'llm', 'no key queues the configured LLM fallback directly');
+
+    finishJob($pg, $job, ['outcome' => 'paused', 'reason' => 'restore_policy'], true);
+    $pausedJob = $pg->one('SELECT status, failures, backend FROM sas_it.sworn_scorned_jobs WHERE id = $1', [$job['id']]);
+    check($pausedJob['status'] === 'pending' && $pausedJob['failures'] === '0' && $pausedJob['backend'] === 'llm', 'commit-time restore pause retains job without penalizing retries');
+    $pg->exec("UPDATE sas_it.sworn_scorned_jobs SET next_attempt_at = now() WHERE id = $1", [$job['id']]);
+    $job = claimJob($pg, 'pt-it');
     check(claimJob($pg, 'pt-it') === null, 'a running job is not claimed twice');
 
     finishJob($pg, $job, ['outcome' => 'retry', 'reason' => 'http_429'], true);
@@ -59,6 +74,7 @@ try {
 
     $e3 = $event('Farkas IT: Fine. (talking to Lydia IT)', $now - 40);
     $settings['api_key'] = 'fixture-key';
+    $settings['use_jev'] = true;
     check(scanOnce($pg, $pt, $settings, $now) === 1, 'newer job queued');
     $otherJobId = (int) $pg->one("INSERT INTO sas_it.sworn_scorned_jobs (playthrough_id, owner_npc_id, owner_name, counterpart_name, event_ids)
         VALUES ('pt-it', 900001, 'Lydia IT', 'Other IT', $1::bigint[]) RETURNING id", [ChimSwornAndScorned\pgIntArray([$e3])])['id'];
@@ -71,7 +87,7 @@ try {
     check((int) $pg->one('SELECT count(*) AS n FROM sas_it.sworn_scorned_jobs WHERE id = $1', [$job['id']])['n'] === 0, 'done jobs are deleted');
     $newer = claimJob($pg, 'pt-it');
     check($newer['event_ids'] === [$e3], 'newer job now runs');
-    check($newer['backend'] === 'decisions', 'configured key queues Decisions');
+    check($newer['backend'] === 'decisions', 'explicit experimental toggle queues Decisions');
     finishJob($pg, $newer, ['outcome' => 'failed', 'reason' => 'http_401'], false);
     check($pg->one('SELECT status FROM sas_it.sworn_scorned_jobs WHERE id = $1', [$newer['id']])['status'] === 'failed', 'failed job stays visible');
     $other = claimJob($pg, 'pt-it');

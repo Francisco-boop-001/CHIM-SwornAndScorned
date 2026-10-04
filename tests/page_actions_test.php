@@ -9,7 +9,8 @@ use function ChimSwornAndScorned\{emptyLedger, issueFlagMutation, normalizeLedge
 
 $known = [5124, 2892, 3];
 check(parsePageAction(['action' => 'save_settings', 'enabled' => '1', 'cast' => ['5124', '2892'], 'model' => ' typesafe/jev~1.13 '], $known)
-    === ['action' => 'save_settings', 'enabled' => true, 'cast' => [5124, 2892], 'model' => 'typesafe/jev~1.13'], 'settings normalized');
+    === ['action' => 'save_settings', 'enabled' => true, 'use_jev' => false, 'cast' => [5124, 2892], 'model' => 'typesafe/jev~1.13'], 'settings normalized');
+check(parsePageAction(['action'=>'save_settings','use_jev'=>'1','model'=>'typesafe/jev-1.13'], $known)['use_jev'], 'experimental toggle explicitly selects Jev');
 check(parsePageAction(['action' => 'save_settings', 'model' => 'typesafe/jev-1.13'], $known)['enabled'] === false, 'unchecked box disables');
 check(parsePageAction(['action' => 'save_settings', 'cast' => ['3', '3'], 'model' => 'x/y'], $known)['cast'] === [3], 'duplicate known ids are stored once');
 rejected(fn () => parsePageAction(['action' => 'save_settings', 'cast' => ['999'], 'model' => 'x/y'], $known), 'unknown cast id refused');

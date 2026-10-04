@@ -72,6 +72,19 @@ function csrfTokenValid(string $sessionToken, mixed $submitted): bool
         && hash_equals($sessionToken, $submitted);
 }
 
+/** A form opened in one profile must expire after switching to another. */
+function pageScopeToken(string $sessionToken, ?string $playthroughId): string
+{
+    return hash_hmac('sha256', $playthroughId ?? 'scope-unavailable', $sessionToken);
+}
+
+/** Global credential/worker controls need CSRF protection but no profile binding. */
+function pageActionToken(string $sessionToken, ?string $playthroughId, mixed $action): string
+{
+    return in_array($action, ['set_key', 'clear_key', 'restart_worker'], true)
+        ? $sessionToken : pageScopeToken($sessionToken, $playthroughId);
+}
+
 /** Cookie options for the page's session; HTTPS gets Secure and all sessions stay HttpOnly/SameSite. */
 function sessionCookieOptions(array $server): array
 {

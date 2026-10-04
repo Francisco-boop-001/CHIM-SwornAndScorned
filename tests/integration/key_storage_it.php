@@ -30,6 +30,7 @@ $key = 'sk-or-fixture-only-' . bin2hex(random_bytes(16));
 
 try {
     ensureSchema($pg);
+    saveSetting($pg, 'use_jev', true);
     $pg->exec('CREATE TABLE sas_it.core_npc_master (LIKE public.core_npc_master INCLUDING ALL)');
     $pg->exec('SET search_path=sas_it,public');
     saveSetting($pg, 'api_key', $key);
@@ -67,11 +68,7 @@ try {
     check(!str_contains(json_encode($model), $key) && !str_contains(json_encode($model), json_decode($migrated, true)['box']), 'page model excludes plaintext and encrypted credential payload');
     $model['key_submission_allowed'] = true;
     check(str_contains(ChimSwornAndScorned\renderPage($model, str_repeat('a', 64), null), 'value="clear_key"'), 'dashboard can render recovery without decrypting key');
-    try {
-        workerTick($pg, $failed, time(), static function (): never { throw new RuntimeException('provider must not be called'); });
-        check(false, 'missing master must block evaluation');
-    } catch (KeyStorageError) {
-    }
+    check(!workerTick($pg, $failed, time(), static function (): never { throw new RuntimeException('provider must not be called'); }), 'missing master intentionally pauses without evaluation or retry churn');
     try {
         saveSetting($pg, 'api_key', $key);
         check(false, 'missing master must reject save');

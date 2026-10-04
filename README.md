@@ -6,7 +6,7 @@
 
 ![A broken oath ring lies between two estranged Nords on snowy mead-hall steps; an emo llama watches from the roof.](server/dashboard-art.webp)
 
-**Release: [0.1.1 — PRE-ALPHA](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/tag/sworn_and_scorned-v0.1.1).** Tested on a disposable CHIM server with synthetic fixtures, real model calls, and a simulated game client. **In-game dialogue quality and long-session behaviour remain unverified.** The llama can hold a clipboard; it cannot certify your save.
+**Release: [0.1.5 — PRE-ALPHA](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/tag/sworn_and_scorned-v0.1.5).** Tested on a disposable CHIM server with synthetic fixtures, real model calls, and a simulated game client. **In-game dialogue quality and long-session behaviour remain unverified.** The llama can hold a clipboard; it cannot certify your save.
 
 ## What it actually does
 
@@ -22,40 +22,45 @@ It does not set Skyrim relationship ranks, complete quests, transfer items, or g
 
 ## Install: pick one route
 
-**0.1.2 adds encrypted storage for this plugin's saved OpenRouter key.** Install the new version and provision its private master key as described below. Older **0.1.1 packages store saved keys as plaintext**; downloading an update does not change the installed server copy.
+**0.1.5 includes encrypted storage for an optional dedicated OpenRouter key.** Reusing CHIM credentials needs no extra key setup. Only dedicated overrides need the private master key described below. Older **0.1.1 packages store saved keys as plaintext**; downloading an update does not change the installed server copy.
+
+This release is **0.1.5 — PRE-ALPHA**. On upgrading from 0.1.2, **reselect and save your cast**: old global NPC IDs are intentionally not carried into another playthrough. Player affinity uses CHIM's canonical `Player` relationship; journal names still use your character's name. **Jev now requires the explicit experimental toggle**, even if you previously saved a plugin key. Existing dedicated keys are retained.
 
 This is a **CHIM server extension** using CHIM's existing client. It adds no ESP/ESL, Papyrus companion, or Skyrim plugin slot. You need CHIM support for server-plugin packages, the conversation evidence/hooks this plugin uses, and PHP CLI worker execution on the server. The [verification record](docs/verification/release-0.1.1.md) identifies the tested server; this is not a claim that every historical CHIM build supports it.
 
 | Route | Download | What to do |
 | --- | --- | --- |
-| **MO2** | [MO2 ZIP](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.2/sworn_and_scorned-0.1.2-mo2.zip) | Import as a mod, enable it, and let a compatible CHIM client sync the embedded server package. |
-| **Plugin Manager upload** | [DWPkg](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.2/sworn_and_scorned-0.1.2.dwpkg) | Upload through CHIM's Plugin Manager. The installation route was exercised for 0.1.1; 0.1.2 has package and isolated runtime checks. |
-| **Repository installer** | [Tar archive](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.2/sworn_and_scorned.tar.gz) | Separate installer format: one `sworn_and_scorned/` wrapper directory is stripped during installation. Catalog-style installation was not exercised. |
+| **MO2** | [MO2 ZIP](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.5/sworn_and_scorned-0.1.5-mo2.zip) | Import as a mod, enable it, and let a compatible CHIM client sync the embedded server package. |
+| **Plugin Manager upload** | [DWPkg](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.5/sworn_and_scorned-0.1.5.dwpkg) | Upload through CHIM's Plugin Manager. The installation route was exercised for 0.1.1; 0.1.5 passed package and isolated runtime checks. |
+| **Repository installer** | [Tar archive](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.5/sworn_and_scorned.tar.gz) | Separate installer format: one `sworn_and_scorned/` wrapper directory is stripped during installation. Catalog-style installation was not exercised. |
 
-[SHA-256 checksums](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.2/SHA256SUMS.txt) · [Release notes](distribution/sworn_and_scorned-v0.1.2.md)
+[SHA-256 checksums](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.5/SHA256SUMS.txt) · [Release notes](distribution/sworn_and_scorned-v0.1.5.md)
 
-The MO2 archive puts `CHIM/server-plugins/sworn_and_scorned/0.1.2.dwpkg` directly under the virtual Data root. **Do not unpack the inner DWPkg into Data.** MO2 may warn that this server-only mod has no recognised game content; it genuinely contains no ESP. No ceremonial dummy plugin has been sacrificed to appease it.
+The MO2 archive puts `CHIM/server-plugins/sworn_and_scorned/0.1.5.dwpkg` directly under the virtual Data root. **Do not unpack the inner DWPkg into Data.** MO2 may warn that this server-only mod has no recognised game content; it genuinely contains no ESP. No ceremonial dummy plugin has been sacrificed to appease it.
 
-**Use one installation source and one enabled version.** Replace an older enabled package rather than stacking versions or letting an old sync package compete with a Plugin Manager update. After installation, verify **0.1.2 in the server's Plugin Manager**, then open **Plugin Page**. A download filename is not running-code evidence. MO2 layout and embedded bytes were verified; automatic MO2-to-server transfer remains untested. No official CHIM catalog listing has been submitted.
+**Use one installation source and one enabled version.** Replace an older enabled package rather than stacking versions or letting an old sync package compete with a Plugin Manager update. After installation, verify **0.1.5 in the server's Plugin Manager**, then open **Plugin Page**. A download filename is not running-code evidence. MO2 layout and embedded bytes were verified; automatic MO2-to-server transfer remains untested. No official CHIM catalog listing has been submitted.
 
 ## Setup: nominate your disasters
 
 1. Open Sworn & Scorned's **Plugin Page**.
 2. Enable it; the feature starts **off**.
 3. Select up to **eight NPCs** as the conversation cast and save. Without a cast, speech is not queued. Issues belong to NPC owners; the player or another NPC can be the counterpart.
-4. Configure a backend below.
+4. Leave **Use Jev — experimental** off for your CHIM relationship LLM, or enable it to reuse CHIM's OpenRouter credentials.
 5. Check backend availability and worker status. Use **Restart worker** if needed.
 
 ### Jev or your CHIM relationship model?
 
 | Configuration | Evaluator used |
 | --- | --- |
-| Save an OpenRouter key on this plugin's page | OpenRouter Decisions API, default model **`typesafe/jev-1.13`**. The decision model ID is editable. |
-| Leave the plugin key empty | CHIM's configured relationship LLM connector, when enabled and using **`openrouterjson`** or **`openrouterjsoncached`**. Other drivers are unsupported by this fallback. |
+| **Use Jev — experimental** off (default) | CHIM's configured relationship LLM connector, when enabled and using **`openrouterjson`** or **`openrouterjsoncached`**. |
+| **Use Jev — experimental** on | OpenRouter Decisions API, default model **`typesafe/jev-1.13`**, using the enabled CHIM relationship connector's OpenRouter key. The decision model ID is editable. |
+| Jev on, with an optional dedicated key under **Advanced** | The dedicated encrypted key overrides CHIM's credential. Useful for separate spending limits; saving a key does not enable Jev. |
 
-**The package ships no API key.** Installation does not automatically activate Jev. Without a plugin key, the supported CHIM connector selects the model. The test server used `google/gemma-4-31b-it`; Gemma is not a bundled requirement.
+**The package ships no API key.** Jev can handle small structured decisions faster and reduce calls to your usual relationship LLM. It stays experimental because Skyrim-conversation interpretation has limited validation and the Decisions API is alpha. It is not your dialogue model and does not take over other plugins. The test server used `google/gemma-4-31b-it`; Gemma is not a bundled requirement.
 
-**Before saving a plugin key on 0.1.2**, an administrator must provision its private master key once. On the Linux CHIM server, with PHP sodium and POSIX available:
+Credential reuse reads the selected **`RELLLM_CONNECTOR`** through CHIM's own resolver. The connector must be enabled, use an OpenRouter JSON driver, and resolve to an HTTPS `openrouter.ai` endpoint with a key. No arbitrary connector or unrelated provider key is borrowed, and no reused credential is copied into this plugin's settings or exposed on the page. If none is available, the page explains the pause. The plugin cannot override your account's Typesafe allowlist.
+
+**Only if saving an optional dedicated Jev key**, an administrator must provision this plugin's private master key once. Reusing CHIM credentials needs no additional master key. On the Linux CHIM server, with PHP sodium and POSIX available:
 
 ```sh
 sudo php /var/www/html/HerikaServer/ext/sworn_and_scorned/provision_key.php
@@ -63,7 +68,7 @@ sudo php /var/www/html/HerikaServer/ext/sworn_and_scorned/provision_key.php
 
 Adjust the plugin location if your server lives elsewhere. This creates **`/var/lib/chim-secrets/sworn_and_scorned.key`**, outside the web root and database: 32 random bytes, owned by `www-data`, file mode `0600`, directory mode `0700`. The helper targets CHIM's `www-data` service account and refuses to overwrite an existing key. An installation with a different PHP/worker account needs its administrator to create the same private layout owned by that account. The web process and CLI worker must use the same master key; optional `CHIM_SWORN_SCORNED_KEY_FILE` must be an absolute private path configured consistently for both.
 
-Existing plaintext plugin keys migrate on the first settings load after provisioning, before they can be used. If migration cannot persist, or the master key is missing, insecure or wrong, evaluation is blocked rather than quietly using another backend. The dashboard remains available to restore the master key or remove/replace the saved key. No need to interrogate the llama with a soldering iron.
+Existing plaintext plugin keys migrate on the first settings load after provisioning, before they can be used. If migration cannot persist, or the master key is missing, insecure or wrong, **Jev evaluation is blocked while that override is selected**. The default CHIM relationship mode remains available. The dashboard's key and restart controls work even without a resolvable playthrough; cast and issue changes still require one. No need to interrogate the llama with a soldering iron.
 
 Transient failures retry after **30 seconds, 2 minutes and 10 minutes**. After the Decisions retry budget, an available supported CHIM fallback is attempted. Exhausted/unrecoverable jobs stay visible as failed. The page shows pending/running/failed counts and fixed failure codes. If Jev has no permitted provider, check whether your OpenRouter account allows Typesafe; the plugin cannot override that policy. Provider calls, retries and fallback can incur charges.
 
@@ -90,7 +95,7 @@ These are illustrative possible outcomes, not gameplay recordings:
 
 ## Affinity: small consequences, once
 
-Only the NPC owner's CHIM opinion of the counterpart changes. Lifecycle decisions require confidence of at least **0.90**; the CHIM fallback uses its validated `high` threshold. Relative changes are clamped to **−100 through +100**. Locked profiles receive no affinity update.
+Only the NPC owner's CHIM opinion of the counterpart changes. Decisions API lifecycle status changes require confidence of at least **0.80**; an affinity change additionally requires **0.90**. The CHIM fallback requires its validated `high` threshold (**0.95**) for both. Relative changes are clamped to **−100 through +100**. Locked profiles receive no affinity update.
 
 | Qualifying transition | Affinity change |
 | --- | ---: |
@@ -132,17 +137,25 @@ All **eight on/off combinations** of Mind Poisoning **0.1.17**, Private Conversa
 
 Structured JSON entries use CHIM's logger, normally **`<HerikaServer>/log/chim.log`**, tagged `"plugin":"sworn_and_scorned"`. Events cover worker starts/stops/errors, evaluations and issue surfacing. PHP's error log is the fallback. Entries contain IDs, backend identity, outcomes and fixed reason codes. There is no dedicated downloadable-log viewer in this release.
 
+The candidate deliberately pauses evaluation while **`NEVER_CLEAR_RELATIONSHIP_DATA` is enabled**, because restoring an older issue ledger beside newer affinity would make the llama's accounts disagree. The page explains the pause; scans, cursors and queued jobs are retained. An unreadable encrypted override also pauses Jev without falling back or repeatedly launching workers. An already running worker logs a pause once and resumes when the condition is repaired. Cast selection and surfacing cooldowns are scoped to the active CHIM playthrough. Changing profiles shows why the previous cast is inactive; saving replaces the previous cast selection. Stale cast/issue forms cannot rebind old row IDs silently, while global key and restart forms remain usable.
+
+The CHIM fallback runs in a fresh PHP CLI process with a **20-second total deadline per model call**, supervised by Linux's **`/usr/bin/timeout`**. It reloads the connector key inside that child; credentials do not travel through command arguments or its input pipe. Linux CLI, `proc_open` and that executable are required; unavailable execution fails closed. This was tested on the disposable WSL server. It also means a provider cannot keep the one worker hostage by dribbling out bytes forever.
+
 **Plugin logs omit raw dialogue, prompts, provider responses and credentials.** CHIM core can log full prompts; providers receive the conversation evidence needed for evaluation. Their retention is outside this plugin. This is not a private-conversation vault wearing a llama sticker.
 
 On **0.1.2**, saved plugin keys use authenticated **libsodium secretbox** encryption with a fresh random nonce on every save. The database contains a versioned ciphertext envelope, while the master key stays in the separate private file above. Keys are never prefilled on the page. Provider requests use HTTPS. Page access requires exact localhost without forwarded headers or a server-authenticated user; mutations use CSRF protection. Remote key entry additionally requires HTTPS recognised by the web server. Direct localhost HTTP remains available for local setup; client-supplied forwarded-protocol headers cannot authorise key entry. TLS-terminating proxies must configure trustworthy server HTTPS state.
 
-**This protects a database-only leak**, not a compromised server. Root, the PHP service account and compromised code running as that account can access a key while it is used. A backup containing both the database and master key can decrypt it. CHIM's own fallback connector credentials retain CHIM's existing storage; this change covers the key saved by this plugin. Use a dedicated spending-limited key.
+**This protects a database-only leak**, not a compromised server. Root, the PHP service account and compromised code running as that account can access a key while it is used. A backup containing both the database and master key can decrypt it. Reused CHIM credentials retain CHIM's existing storage; this encryption covers only the optional key saved by this plugin. An optional dedicated spending-limited key can isolate this plugin's provider budget.
 
-**Back up the master key separately and securely from the database.** Losing it means replacing the saved API key; creating a new master does not recover old ciphertext. Do not rotate the master file blindly. **Clear key** removes the current plugin setting and returns to an available CHIM fallback; it neither revokes the key at OpenRouter nor erases old backups, WAL or historical plaintext copies. Rotate a previously exposed provider key yourself. Encryption is useful; retroactive amnesia is still outside the budget.
+**Back up the master key separately and securely from the database.** Losing it means replacing the saved API key; creating a new master does not recover old ciphertext. Do not rotate the master file blindly. **Clear key** removes the current plugin override. With Jev enabled, it returns to CHIM's OpenRouter credentials; with Jev disabled, the CHIM relationship LLM is used. It neither revokes the key at OpenRouter nor erases old backups, WAL or historical plaintext copies. Rotate a previously exposed provider key yourself. Encryption is useful; retroactive amnesia is still outside the budget.
 
 [0.1.2 security verification](docs/verification/key-encryption-0.1.2.md): real crypto/filesystem tests, encrypted-save and migration integration, recovery controls, HTTPS gates and independent review. Administrators choosing a custom master path must keep it outside **every** served directory, including nonstandard web roots.
 
 ## Tested, and not magically tested
+
+The **0.1.5 candidate** passed 34 syntax checks, 33 regular scripts, eight synthetic database suites, two package tests and eight installed-dashboard HTTP checks. Jev credential reuse was checked against the real CHIM resolver without billing a provider. Experimental/default routing, global key/restart controls, cast-switch guidance and empty Player/NPC relationship maps have regression coverage. [Jev toggle verification and remaining limits](docs/verification/jev-toggle-0.1.5.md).
+
+The **0.1.4 candidate** passed 34 syntax checks, 32 regular scripts, seven synthetic database suites and two package checks. A 240-batch session with 240 simulated crash replays made exactly one provider pass per batch; pause, profile-scope, canonical player affinity and native HTTP deadline regressions passed. The installed dashboard passed its HTTP checks and the clone fixture was restored. [Correction verification and remaining limits](docs/verification/critique-fixes-0.1.4.md).
 
 Acceptance included **31 PHP syntax checks, 28 unit/regression scripts, five isolated database suites, two package checks, 14 real-adapter synthetic replays, browser controls, simulated-client exchanges and eight coexistence combinations**. Independent review findings were fixed before final acceptance. [Detailed record](docs/verification/release-0.1.1.md)
 

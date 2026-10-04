@@ -183,7 +183,7 @@ check(processJob($job, $deps) === ['outcome' => 'retry', 'reason' => 'owner_busy
 
 $deps = $freshDeps($promiseAnswers);
 $deps->commitStatus = 'restore_policy';
-check(processJob($job, $deps) === ['outcome' => 'done', 'reason' => 'restore_policy'], 'restore policy skips writes');
+check(processJob($job, $deps) === ['outcome' => 'paused', 'reason' => 'restore_policy'], 'commit-time restore policy retains work for recovery');
 
 $deps = $freshDeps($promiseAnswers);
 $deps->backends['decisions'] = [new class implements DecisionBackend {

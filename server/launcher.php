@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace ChimSwornAndScorned;
 
+require_once __DIR__ . '/tables.php';
+
 function workerCommand(string $phpBinary, string $workerPath): string
 {
     return escapeshellarg($phpBinary) . ' ' . escapeshellarg($workerPath) . ' --sas-daemon';
@@ -29,8 +31,9 @@ function workerPidAlive(string $pidFile, string $procRoot = '/proc'): bool
 }
 
 /** Spawn the daemon; the worker forks and detaches itself. */
-function ensureWorkerRunning(string $engineRoot, string $pluginDir, string $phpBinary = '/usr/bin/php'): string
+function ensureWorkerRunning(string $engineRoot, string $pluginDir, #[\SensitiveParameter] array $settings, string $phpBinary = '/usr/bin/php'): string
 {
+    if (workerPauseReason($settings) !== null) return 'paused';
     if (workerPidAlive($engineRoot . '/log/sworn_scorned_worker.pid')) {
         return 'running';
     }

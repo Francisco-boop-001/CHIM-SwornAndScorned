@@ -186,17 +186,18 @@ function buildPageModel(Pg $pg, string $engineRoot, bool $director): array
     unset($entry);
 
     $backend = ['status' => 'No backend available', 'model' => ''];
-    if ($settings['_key_error'] !== null) {
+    if ($settings['use_jev'] && $settings['_key_error'] !== null) {
         $backend['status'] = 'Key storage unavailable; evaluations blocked';
-    } elseif ($settings['api_key'] !== '') {
-        $backend = ['status' => 'Decisions API configured', 'model' => $settings['model']];
+    } elseif ($settings['use_jev']) {
+        $backend = ['status' => decisionApiKey($settings) === null ? 'Jev unavailable: OpenRouter credentials missing'
+            : ($settings['api_key'] !== '' ? 'Jev configured: dedicated key' : 'Jev configured: CHIM OpenRouter credentials'), 'model' => $settings['model']];
     } else {
         try {
             $enabled = !function_exists('chimIsGlobalLlmConnectorEnabled')
                 || \chimIsGlobalLlmConnectorEnabled('RELLLM_CONNECTOR') === true;
             $identity = $enabled ? relationshipConnectorIdentity() : null;
             if ($identity !== null) {
-                $backend['status'] = 'CHIM LLM fallback available';
+                $backend['status'] = 'CHIM relationship LLM available';
                 $backend['model'] = $identity['model'];
             }
         } catch (\Throwable) {
@@ -204,9 +205,13 @@ function buildPageModel(Pg $pg, string $engineRoot, bool $director): array
     }
 
     return [
+        'playthrough_id' => $playthrough['id'] ?? null,
         'settings' => [
             'enabled' => $settings['enabled'],
+            'use_jev' => $settings['use_jev'],
             'cast' => $cast,
+            'cast_reselect' => $settings['_cast_reselect'],
+            'cast_other_playthrough' => $settings['_cast_other_playthrough'],
             'model' => $settings['model'],
             'has_key' => $settings['_key_present'],
             'key_error' => $settings['_key_error'] !== null,
@@ -214,6 +219,7 @@ function buildPageModel(Pg $pg, string $engineRoot, bool $director): array
         'backend' => $backend,
         'npcs' => $npcs,
         'worker' => [
+            'pause' => ($pause = workerPauseReason($settings)) === null ? null : workerPauseNotice($pause),
             'alive' => workerPidAlive($engineRoot . '/log/sworn_scorned_worker.pid'),
             'jobs' => $jobs,
             'last_failure' => $lastFailure,

@@ -5,7 +5,7 @@ require __DIR__ . '/support/check.php';
 require __DIR__ . '/support/llm_stubs.php';
 require __DIR__ . '/../server/llm_connector.php';
 
-use function ChimSwornAndScorned\{relationshipConnectorAvailable, relationshipConnectorCompletion, relationshipConnectorIdentity};
+use function ChimSwornAndScorned\{relationshipConnectorAvailable, relationshipConnectorDirectCompletion as relationshipConnectorCompletion, relationshipConnectorIdentity};
 
 $GLOBALS['HTTP_TIMEOUT'] = 5;
 $GLOBALS['FORCE_MAX_TOKENS'] = 512;
@@ -84,6 +84,7 @@ try {
 check($GLOBALS['HTTP_TIMEOUT'] === 5 && $GLOBALS['FORCE_MAX_TOKENS'] === 512, 'globals restored after provider errors');
 check($GLOBALS['CONNECTOR'] === ['existing' => ['API_KEY' => 'keep']], 'connector globals restored after provider errors');
 
+check(function_exists('pcntl_alarm') && function_exists('pcntl_signal_get_handler') && function_exists('pcntl_async_signals'), 'test runtime supports bounded connector signals');
 $GLOBALS['RELLLM_CONNECTOR'] = 'not-an-id';
 check(!relationshipConnectorAvailable(), 'unavailable without a valid connector id');
 try {

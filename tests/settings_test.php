@@ -7,7 +7,9 @@ require __DIR__ . '/../server/tables.php';
 use function ChimSwornAndScorned\{normalizeSettings, parsePgIntArray, pgIntArray, sasTable};
 use const ChimSwornAndScorned\DEFAULT_SETTINGS;
 
-check(normalizeSettings(DEFAULT_SETTINGS) === ['enabled' => false, 'cast' => [], 'model' => 'typesafe/jev-1.13', 'api_key' => ''], 'defaults: disabled');
+check(normalizeSettings(DEFAULT_SETTINGS) === ['enabled' => false, 'use_jev' => false, 'cast' => [], 'model' => 'typesafe/jev-1.13', 'api_key' => ''], 'defaults: feature and experimental Jev disabled');
+check(normalizeSettings(['use_jev'=>'yes'])['use_jev'] === false, 'only true opts into Jev');
+check(normalizeSettings(['use_jev'=>true])['use_jev'] === true, 'explicit Jev opt-in is retained');
 check(normalizeSettings(['enabled' => 'yes'] + DEFAULT_SETTINGS)['enabled'] === false, 'only true enables');
 check(normalizeSettings(['cast' => ['5124', 5124, -1, 'x', 2892, 1, 2, 3, 4, 5, 6, 7]] + DEFAULT_SETTINGS)['cast'] === [5124, 2892, 1, 2, 3, 4, 5, 6], 'cast: positive unique ids, at most 8');
 check(normalizeSettings(['model' => 'bad model; drop'] + DEFAULT_SETTINGS)['model'] === 'typesafe/jev-1.13', 'invalid model falls back');

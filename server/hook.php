@@ -157,16 +157,19 @@ function surfaceForSpeaker(Pg $pg, array $gameRequest, string $speaker, mixed $c
             $candidates[$issue['counterpart']] = $name;
         }
     }
-    $playerText = in_array($playthrough['player_name'], $names, true)
+    $present = presentKeys($names, $playthrough['player_name'], $npcIdsByLowerName);
+    $playerText = in_array('player', $present, true)
         ? playerInputText($gameRequest, $playthrough['player_name']) : '';
     $text = $playerText . "\n" . recentSpeechText($pg, $now, $playthrough['player_name'], $speaker, $names);
+    $pacingPrefix = hash('sha256', $playthrough['id']) . ':';
     $pacing = [];
-    foreach ($pg->all('SELECT issue_id, surfaced_at, evidence_count, evidence_ref FROM ' . sasTable('pacing') . ' WHERE npc_id = $1', [$speakerId]) as $row) {
-        $pacing[$row['issue_id']] = ['at' => (int) $row['surfaced_at'], 'evidence_count' => (int) $row['evidence_count'], 'evidence_ref' => $row['evidence_ref']];
+    foreach ($pg->all('SELECT issue_id, surfaced_at, evidence_count, evidence_ref FROM ' . sasTable('pacing') . ' WHERE npc_id = $1 AND issue_id LIKE $2', [$speakerId, $pacingPrefix . '%']) as $row) {
+        $issueId = substr($row['issue_id'], strlen($pacingPrefix));
+        $pacing[$issueId] = ['at' => (int) $row['surfaced_at'], 'evidence_count' => (int) $row['evidence_count'], 'evidence_ref' => $row['evidence_ref']];
     }
     $issue = selectIssueToSurface(
         $ledger,
-        presentKeys($names, $playthrough['player_name'], $npcIdsByLowerName),
+        $present,
         mentionedKeys($text, $candidates),
         $pacing,
         $now,
@@ -184,7 +187,7 @@ function surfaceForSpeaker(Pg $pg, array $gameRequest, string $speaker, mixed $c
         $pg->exec(
             'INSERT INTO ' . sasTable('pacing') . ' (npc_id, issue_id, surfaced_at, evidence_count, evidence_ref) VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT (npc_id, issue_id) DO UPDATE SET surfaced_at = EXCLUDED.surfaced_at, evidence_count = EXCLUDED.evidence_count, evidence_ref = EXCLUDED.evidence_ref',
-            [$speakerId, $issue['id'], $now, count($issue['evidence']), $issue['evidence'][array_key_last($issue['evidence'])]['ref'] ?? '']
+            [$speakerId, $pacingPrefix . $issue['id'], $now, count($issue['evidence']), $issue['evidence'][array_key_last($issue['evidence'])]['ref'] ?? '']
         );
         $pg->exec('COMMIT');
     } catch (\Throwable) {

@@ -45,13 +45,20 @@ try {
     }
     $request = ['inputtext', '1', '2', $pt['player_name'] . ': Hello there.'];
     $now = time();
+    $issue = $ledger['issues'][0];
+    $pg->exec(
+        'INSERT INTO sas_it.sworn_scorned_pacing (npc_id, issue_id, surfaced_at, evidence_count, evidence_ref) VALUES ($1, $2, $3, $4, $5)',
+        [900001, $issue['id'], $now - 1, count($issue['evidence']), $issue['evidence'][array_key_last($issue['evidence'])]['ref']]
+    );
 
     check(surfaceForSpeaker($pg, $request, 'Lydia IT', '|Lydia IT|' . $pt['player_name'] . '|', $now) === null, 'no note when the counterpart is absent');
     $note = surfaceForSpeaker($pg, $request, 'Lydia IT', '|Lydia IT|Farkas IT|', $now);
     check(is_string($note) && str_starts_with($note, 'On your mind: unresolved with Farkas IT.'), 'note when the counterpart is present');
+    $pacingIssueId = hash('sha256', $pt['id']) . ':' . $issue['id'];
+    check((int) $pg->one('SELECT count(*) AS n FROM sas_it.sworn_scorned_pacing WHERE npc_id = $1 AND issue_id = $2', [900001, $pacingIssueId])['n'] === 1, 'pacing is stored under the current playthrough');
     check(surfaceForSpeaker($pg, $request, 'Lydia IT', '|Lydia IT|Farkas IT|', $now + 10) === null, 'cooldown suppresses a repeat');
     $named = ['inputtext', '1', '2', $pt['player_name'] . ': What is wrong between you and Farkas IT?'];
-    check(is_string(surfaceForSpeaker($pg, $named, 'Lydia IT', '|Lydia IT|Farkas IT|' . $pt['player_name'] . '|', $now + 20)), 'present player naming the counterpart overrides the cooldown');
+    check(is_string(surfaceForSpeaker($pg, $named, 'Lydia IT', '|Lydia IT|Farkas IT|' . mb_strtolower($pt['player_name']) . '|', $now + 20)), 'case-varied present player naming the counterpart overrides the cooldown');
     check(surfaceForSpeaker($pg, $named, 'Lydia IT', '|Lydia IT|Farkas IT|', $now + 21) === null, 'excluded player cannot override scene pacing');
     check(surfaceForSpeaker($pg, $request, 'Farkas IT', '|Lydia IT|Farkas IT|', $now) === null, 'other speakers do not get Lydia\'s note');
     $latest = $ledger;

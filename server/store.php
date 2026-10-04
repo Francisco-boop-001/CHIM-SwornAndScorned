@@ -25,6 +25,9 @@ final class PerspectiveStore
      */
     public function commitLedger(array $request, callable $mutate): string
     {
+        if (function_exists('chimLoadGeneralSettingsIntoGlobals')) {
+            \chimLoadGeneralSettingsIntoGlobals();
+        }
         if (filter_var($GLOBALS['NEVER_CLEAR_RELATIONSHIP_DATA'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
             return 'restore_policy';
         }
@@ -59,6 +62,7 @@ final class PerspectiveStore
                 foreach ($this->pg->all('SELECT key, value::text AS value FROM ' . sasTable('settings') . " WHERE key IN ('enabled','cast') ORDER BY key FOR SHARE") as $setting) {
                     $freshSettings[$setting['key']] = json_decode($setting['value'], true);
                 }
+                $freshSettings['cast'] = castForPlaythrough($freshSettings['cast'] ?? [], $playthrough['id']);
                 $freshSettings = normalizeSettings($freshSettings);
                 if (!$freshSettings['enabled']) return 'disabled';
                 if (!in_array($ownerId, $freshSettings['cast'], true)) return 'cast_changed';
@@ -87,15 +91,26 @@ final class PerspectiveStore
             $extendedSql = 'extended_data';
             $counterpartName = $request['counterpart_name'] ?? null;
             if ((int) $result['affinity_delta'] !== 0 && is_string($counterpartName)) {
-                $edge = $this->nextEdge($row, $counterpartName, (int) $result['affinity_delta']);
-                if ($edge === false) {
-                    return 'edge_invalid';
-                }
-                if ($edge !== null) {
-                    $params[] = $counterpartName;
-                    $params[] = json_encode($edge, JSON_FLAGS);
-                    $extendedSql = "jsonb_set(jsonb_set(COALESCE(extended_data, '{}'::jsonb), '{relationships}',"
-                        . " COALESCE(extended_data->'relationships', '{}'::jsonb), true), ARRAY['relationships', \$4::text], \$5::jsonb, true)";
+                if (($request['counterpart_key'] ?? null) === 'player') {
+                    $relationships = $this->nextPlayerRelationships($row, $playthrough['player_name'], (int) $result['affinity_delta']);
+                    if ($relationships === false) {
+                        return 'edge_invalid';
+                    }
+                    if ($relationships !== null) {
+                        $params[] = json_encode($relationships, JSON_FLAGS);
+                        $extendedSql = "jsonb_set(COALESCE(extended_data, '{}'::jsonb), '{relationships}', \$4::jsonb, true)";
+                    }
+                } else {
+                    $edge = $this->nextEdge($row, $counterpartName, (int) $result['affinity_delta']);
+                    if ($edge === false) {
+                        return 'edge_invalid';
+                    }
+                    if ($edge !== null) {
+                        $params[] = $counterpartName;
+                        $params[] = json_encode($edge, JSON_FLAGS);
+                        $extendedSql = "jsonb_set(jsonb_set(COALESCE(extended_data, '{}'::jsonb), '{relationships}',"
+                            . " CASE WHEN jsonb_typeof(extended_data->'relationships') = 'object' THEN extended_data->'relationships' ELSE '{}'::jsonb END, true), ARRAY['relationships', \$4::text], \$5::jsonb, true)";
+                    }
                 }
             }
             $updated = $this->pg->one(
@@ -138,7 +153,13 @@ final class PerspectiveStore
             return null;
         }
         $relationships = $extended->relationships ?? new \stdClass();
-        $edge = $relationships instanceof \stdClass && isset($relationships->{$name})
+        if ($relationships === []) {
+            $relationships = new \stdClass();
+        }
+        if (!$relationships instanceof \stdClass) {
+            return false;
+        }
+        $edge = isset($relationships->{$name})
             ? $relationships->{$name}
             : (object) ['aff' => 0, 'type' => 'neutral'];
         if (!$edge instanceof \stdClass) {
@@ -152,6 +173,80 @@ final class PerspectiveStore
         $next = max(-100.0, min(100.0, (float) $affinity + $delta));
         $edge->aff = floor($next) === $next ? (int) $next : $next;
         return $edge;
+    }
+
+    /** Apply affinity to CHIM's Player edge and remove legacy aliases before they can win normalization. */
+    private function nextPlayerRelationships(array $row, string $playerName, int $delta): \stdClass|false|null
+    {
+        $extended = json_decode($row['extended_data'] ?? '{}');
+        if (!$extended instanceof \stdClass) {
+            $extended = new \stdClass();
+        }
+        if ((int) ($row['lock_profile'] ?? 0) !== 0 || !empty($extended->relationships_locked)) {
+            return null;
+        }
+
+        $relationships = $extended->relationships ?? new \stdClass();
+        if ($relationships === []) {
+            $relationships = new \stdClass();
+        }
+        if (!$relationships instanceof \stdClass) {
+            return false;
+        }
+        if (!class_exists(\RelationshipManager::class, false)) {
+            $enginePath = $GLOBALS['ENGINE_PATH'] ?? null;
+            if (is_string($enginePath) && $enginePath !== '') {
+                $managerPath = rtrim($enginePath, '/\\') . DIRECTORY_SEPARATOR . 'lib' . DIRECTORY_SEPARATOR . 'relationship_manager.php';
+                if (is_file($managerPath)) {
+                    require_once $managerPath;
+                }
+            }
+        }
+        if (!class_exists(\RelationshipManager::class, false)
+            || !is_callable([\RelationshipManager::class, 'normalizeTargetName'])
+            || !is_callable([\RelationshipManager::class, 'normalizeRelationshipMap'])) {
+            return false;
+        }
+
+        $hadPlayerName = array_key_exists('PLAYER_NAME', $GLOBALS);
+        $previousPlayerName = $GLOBALS['PLAYER_NAME'] ?? null;
+        $GLOBALS['PLAYER_NAME'] = $playerName;
+        try {
+            $playerEdges = [];
+            $playerKeys = [];
+            foreach ($relationships as $target => $edge) {
+                $target = (string) $target;
+                if (\RelationshipManager::normalizeTargetName($target) !== 'Player') {
+                    continue;
+                }
+                if (!$edge instanceof \stdClass) {
+                    return false;
+                }
+                $playerKeys[] = $target;
+                $playerEdges[$target] = get_object_vars($edge);
+            }
+            $normalized = \RelationshipManager::normalizeRelationshipMap($playerEdges);
+            $edge = (object) ($normalized['Player'] ?? ['aff' => 0, 'type' => 'neutral']);
+            $affinity = $edge->aff ?? 0;
+            if (!is_int($affinity) && !is_float($affinity) && !(is_string($affinity) && is_numeric($affinity))) {
+                return false;
+            }
+            $next = max(-100.0, min(100.0, (float) $affinity + $delta));
+            $edge->aff = floor($next) === $next ? (int) $next : $next;
+            foreach ($playerKeys as $target) {
+                unset($relationships->{$target});
+            }
+            $relationships->Player = $edge;
+            return $relationships;
+        } catch (\Throwable) {
+            return false;
+        } finally {
+            if ($hadPlayerName) {
+                $GLOBALS['PLAYER_NAME'] = $previousPlayerName;
+            } else {
+                unset($GLOBALS['PLAYER_NAME']);
+            }
+        }
     }
 
     /** Full-row history snapshot, as Mind Poisoning does, so CHIM restore rolls our ledger back. */

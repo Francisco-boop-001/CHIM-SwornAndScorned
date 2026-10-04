@@ -18,6 +18,7 @@ final class LLMConnector
     {
         self::$setGlobalsCalls++;
         $GLOBALS['CONNECTOR'][$row['driver']] = ['API_KEY' => $row['test_api_key'] ?? ''];
+        if (isset($row['url'])) $GLOBALS['CONNECTOR'][$row['driver']]['url'] = $row['url'];
     }
 
     public function getConnector(array $row): object

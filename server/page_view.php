@@ -66,8 +66,9 @@ function renderIssue(array $issue, int $npcId, string $csrf, bool $director): st
 }
 
 /** @param array $model page-safe settings/backend/worker/journal data without the API key */
-function renderPage(array $model, string $csrf, ?string $notice): string
+function renderPage(array $model, string $csrf, ?string $notice, ?string $globalCsrf = null): string
 {
+    $globalCsrf ??= $csrf;
     $settings = $model['settings'];
     $backend = $model['backend'];
     $worker = $model['worker'];
@@ -83,39 +84,45 @@ function renderPage(array $model, string $csrf, ?string $notice): string
         $out .= '<p class="notice" role="status">' . h($notice) . '</p>';
     }
 
+    if (!empty($worker['pause'])) $out .= '<p class="notice" role="status">' . h($worker['pause']) . '</p>';
+    if (!empty($settings['cast_reselect'])) $out .= '<p class="notice">Reselect and save the cast for this playthrough after upgrading. Legacy row IDs are no longer shared between profiles.</p>';
+    if (!empty($settings['cast_other_playthrough'])) $out .= '<p class="notice">Cast was selected in another playthrough; reselect and save it for this one to resume new tracking. Saving replaces the previous cast selection.</p>';
     $out .= '<section><h2>Settings</h2><p>Backend: ' . h((string) ($backend['status'] ?? 'Unavailable'))
         . (empty($backend['model']) ? '' : ' · ' . h((string) $backend['model'])) . '</p>'
         . '<form method="post">' . csrfField($csrf) . '<input type="hidden" name="action" value="save_settings">'
         . '<label><input type="checkbox" name="enabled" value="1"' . (!empty($settings['enabled']) ? ' checked' : '') . '> Enabled</label>'
-        . '<label>Decision model <input name="model" value="' . h((string) $settings['model']) . '"></label>'
+        . '<label><input type="checkbox" name="use_jev" value="1"' . (!empty($settings['use_jev']) ? ' checked' : '') . '> Use Jev — experimental</label>'
+        . '<p>Jev handles promise and grievance decisions faster, reducing calls to your usual relationship LLM. It uses your existing CHIM OpenRouter credentials and incurs API charges. Experimental: its interpretation of Skyrim conversations has limited validation, and it uses OpenRouter\'s alpha Decisions API. Failed requests can fall back to your configured relationship LLM.</p>'
+        . '<label>Jev decision model <input name="model" value="' . h((string) $settings['model']) . '"></label>'
         . '<fieldset><legend>Cast (up to 8)</legend><div class="cast">';
     foreach ($model['npcs'] as $npc) {
         $checked = in_array($npc['id'], $settings['cast'], true) ? ' checked' : '';
         $out .= '<label><input type="checkbox" name="cast[]" value="' . (int) $npc['id'] . '"' . $checked . '> ' . h((string) $npc['name']) . '</label>';
     }
     $out .= '</div></fieldset><button type="submit">Save settings</button></form>';
+    $out .= '<details><summary>Advanced: optional dedicated Jev key</summary><p>Normally Jev reuses the enabled CHIM OpenRouter relationship connector\'s key. A dedicated key overrides it for separate spending limits. Saving a key does not enable Jev.</p>';
     if (!empty($settings['key_error'])) {
-        $out .= '<p class="notice">Saved key unavailable; evaluations blocked. Restore the private master key, or remove the saved key and provision storage before replacing it.</p>';
+        $out .= '<p class="notice">Saved Jev override unavailable. Jev evaluations are blocked while it is selected; the default CHIM mode remains available. Restore the private master key, or remove the saved key before replacing it.</p>';
     } else {
-        $out .= '<p>' . (!empty($settings['has_key']) ? 'Key saved (encrypted, hidden).' : 'No key: the CHIM LLM fallback is used when available.') . '</p>';
+        $out .= '<p>' . (!empty($settings['has_key']) ? 'Dedicated key saved (encrypted, hidden).' : 'No dedicated key saved; Jev uses CHIM credentials when selected.') . '</p>';
     }
     if (($model['key_submission_allowed'] ?? false) === true) {
-        $out .= '<form method="post" class="key">' . csrfField($csrf) . '<input type="hidden" name="action" value="set_key">'
-            . '<label>OpenRouter key <input type="password" name="api_key" autocomplete="new-password"></label><button type="submit">Save key</button></form>';
+        $out .= '<form method="post" class="key">' . csrfField($globalCsrf) . '<input type="hidden" name="action" value="set_key">'
+            . '<label>Optional OpenRouter key <input type="password" name="api_key" autocomplete="new-password"></label><button type="submit">Save key</button></form>';
     } else {
         $out .= '<p>Use HTTPS or direct localhost to save a key.</p>';
     }
     if (!empty($settings['has_key'])) {
-        $out .= '<form method="post">' . csrfField($csrf) . '<input type="hidden" name="action" value="clear_key"><button type="submit">Remove key</button></form>';
+        $out .= '<form method="post">' . csrfField($globalCsrf) . '<input type="hidden" name="action" value="clear_key"><button type="submit">Remove key</button></form>';
     }
-    $out .= '</section>';
+    $out .= '</details></section>';
 
     $out .= '<section><h2>Worker</h2><p>' . (!empty($worker['alive']) ? 'Worker running' : 'Worker stopped')
         . ' · ' . (int) $jobs['pending'] . ' waiting · ' . (int) $jobs['running'] . ' running · ' . (int) $jobs['failed'] . ' failed</p>';
     if (is_string($worker['last_failure'] ?? null) && $worker['last_failure'] !== '') {
         $out .= '<p>Last failure: ' . h($worker['last_failure']) . '</p>';
     }
-    $out .= '<form method="post">' . csrfField($csrf) . '<input type="hidden" name="action" value="restart_worker"><button type="submit">Attempt worker restart</button></form></section>';
+    $out .= '<form method="post">' . csrfField($globalCsrf) . '<input type="hidden" name="action" value="restart_worker"><button type="submit">Attempt worker restart</button></form></section>';
 
     $out .= '<section><h2>Journal</h2><p class="meta">' . ($director
         ? 'Director view: everything is shown. <a href="?">Spoiler-safe view</a>'

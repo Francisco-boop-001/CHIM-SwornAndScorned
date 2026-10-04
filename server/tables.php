@@ -7,8 +7,9 @@ use UnexpectedValueException;
 
 require_once __DIR__ . '/pg.php';
 require_once __DIR__ . '/key_crypto.php';
+require_once __DIR__ . '/llm_connector.php';
 
-const DEFAULT_SETTINGS = ['enabled' => false, 'cast' => [], 'model' => 'typesafe/jev-1.13', 'api_key' => ''];
+const DEFAULT_SETTINGS = ['enabled' => false, 'use_jev' => false, 'cast' => [], 'model' => 'typesafe/jev-1.13', 'api_key' => ''];
 const MAX_CAST = 8;
 
 function sasTable(string $name): string
@@ -77,6 +78,7 @@ function normalizeSettings(array $settings): array
     $model = $settings['model'] ?? null;
     return [
         'enabled' => ($settings['enabled'] ?? false) === true,
+        'use_jev' => ($settings['use_jev'] ?? false) === true,
         'cast' => array_slice($cast, 0, MAX_CAST),
         'model' => is_string($model) && preg_match('#\A[A-Za-z0-9~._/-]{3,100}\z#D', $model) === 1 ? $model : DEFAULT_SETTINGS['model'],
         'api_key' => is_string($settings['api_key'] ?? null) ? trim($settings['api_key']) : '',
@@ -95,9 +97,16 @@ function loadSettings(Pg $pg): array
             }
         }
     }
+    $rawCast = $settings['cast'];
+    $playthroughId = currentPlaythrough($pg)['id'] ?? null;
+    $settings['cast'] = castForPlaythrough($rawCast, $playthroughId);
     $stored = $settings['api_key'];
     $settings['api_key'] = '';
     $settings = normalizeSettings($settings);
+    $settings['_cast_playthrough'] = is_array($rawCast) ? ($rawCast['playthrough_id'] ?? null) : null;
+    $settings['_cast_reselect'] = is_array($rawCast) && array_is_list($rawCast) && $rawCast !== [];
+    $settings['_cast_other_playthrough'] = is_array($rawCast) && !empty($rawCast['ids'])
+        && ($rawCast['playthrough_id'] ?? null) !== $playthroughId;
     $settings['_key_present'] = $stored !== '';
     $settings['_key_error'] = null;
     try {
@@ -135,10 +144,17 @@ function loadSettings(Pg $pg): array
     }
 }
 
-function saveSetting(Pg $pg, string $key, #[\SensitiveParameter] mixed $value): void
+function saveSetting(Pg $pg, string $key, #[\SensitiveParameter] mixed $value, ?string $expectedPlaythroughId = null): void
 {
     if (!array_key_exists($key, DEFAULT_SETTINGS)) {
         throw new UnexpectedValueException('setting_unknown');
+    }
+    if ($key === 'cast') {
+        $scope = currentPlaythrough($pg);
+        if ($scope === null || ($expectedPlaythroughId !== null && $scope['id'] !== $expectedPlaythroughId)) {
+            throw new UnexpectedValueException('cast_scope_unavailable');
+        }
+        $value = ['playthrough_id' => $scope['id'], 'ids' => normalizeSettings(['cast' => $value])['cast']];
     }
     if ($key === 'api_key') {
         if (!is_string($value)) {
@@ -153,6 +169,35 @@ function saveSetting(Pg $pg, string $key, #[\SensitiveParameter] mixed $value): 
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value',
         [$key, json_encode($value, JSON_FLAGS)]
     );
+}
+
+/** NPC row IDs are meaningful only within the playthrough that selected them. */
+function castForPlaythrough(mixed $stored, ?string $playthroughId): array
+{
+    if (!is_array($stored) || $playthroughId === null || ($stored['playthrough_id'] ?? null) !== $playthroughId) {
+        return [];
+    }
+    return normalizeSettings(['cast' => $stored['ids'] ?? []])['cast'];
+}
+
+/** Shared launch/tick eligibility: an intentional pause must not consume work. */
+function workerPauseReason(#[\SensitiveParameter] array $settings): ?string
+{
+    if (empty($settings['enabled'])) return 'disabled';
+    if (!empty($settings['use_jev']) && !empty($settings['_key_error'])) return 'key_storage_unavailable';
+    if (filter_var($GLOBALS['NEVER_CLEAR_RELATIONSHIP_DATA'] ?? false, FILTER_VALIDATE_BOOLEAN)) return 'restore_policy';
+    if (!empty($settings['use_jev']) && decisionApiKey($settings) === null) return 'jev_credentials_unavailable';
+    return null;
+}
+
+function workerPauseNotice(string $reason): string
+{
+    return match ($reason) {
+        'restore_policy' => 'Evaluations paused: disable NEVER_CLEAR_RELATIONSHIP_DATA to keep issues and affinity consistent when restoring saves. Queued work is retained.',
+        'key_storage_unavailable' => 'Evaluations paused: restore the private master key or remove the unreadable saved key. Queued work is retained.',
+        'jev_credentials_unavailable' => 'Jev paused: configure an enabled CHIM OpenRouter relationship connector with a key, or save an optional dedicated key. Queued work is retained.',
+        default => 'Evaluations paused: the feature is disabled.',
+    };
 }
 
 /** Same rule as Mind Poisoning: unprofiled, or exactly one active profile. */

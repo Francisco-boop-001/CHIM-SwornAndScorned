@@ -55,7 +55,7 @@ $html = renderPage($model, $csrf, 'Settings saved.');
 check(str_contains($html, '&lt;script&gt;x&lt;/script&gt;') && !str_contains($html, '<script>x</script>'), 'NPC names are escaped');
 check(str_contains($html, 'Lydia &lt;b&gt;'), 'counterpart names are escaped');
 check(str_contains($html, 'name="csrf" value="' . $csrf . '"'), 'forms carry the CSRF token');
-check(str_contains($html, 'Key saved') && !str_contains($html, 'sk-secret-must-never-render') && !preg_match('/name="api_key"[^>]*value=/i', $html), 'saved key status is shown without echoing or prefilling the key');
+check(str_contains($html, 'key saved') && !str_contains($html, 'sk-secret-must-never-render') && !preg_match('/name="api_key"[^>]*value=/i', $html), 'saved key status is shown without echoing or prefilling the key');
 check(str_contains($html, 'Decisions API ready'), 'backend status is shown');
 check(str_contains($html, 'Worker stopped') && str_contains($html, '2 waiting') && str_contains($html, '1 failed'), 'worker state and current-scope counts are shown');
 check(str_contains($html, 'http_429'), 'last fixed failure is shown');
@@ -69,7 +69,7 @@ check(preg_match('~<details>.*broken.*worsening.*Wants: explanation.*Owed to you
 check(str_contains($html, 'Dismiss (Out-of-character)'), 'dismiss is labelled out-of-character');
 
 $director = renderPage(['director' => true] + $model, $csrf, null);
-check(!str_contains($director, '<details>') && str_contains($director, 'broken') && str_contains($director, 'Owed to you by Lydia &lt;b&gt;') && str_contains($director, 'Commitment: Will try') && str_contains($director, 'Source: e:10'), 'director view shows issue details directly');
+check(!str_contains($director, '<summary>Issue details</summary>') && str_contains($director, 'broken') && str_contains($director, 'Owed to you by Lydia &lt;b&gt;') && str_contains($director, 'Commitment: Will try') && str_contains($director, 'Source: e:10'), 'director view shows issue details directly');
 
 $corrupt = $model;
 $corrupt['journal'][0]['ledger_invalid'] = true;
@@ -77,4 +77,13 @@ $corrupt['journal'][0]['issues'] = [];
 $corruptHtml = renderPage($corrupt, $csrf, null);
 check(str_contains($corruptHtml, 'Issue data unavailable') && !str_contains($corruptHtml, '0 tracked issues'), 'corrupt ledger is not presented as an empty journal');
 
+$changedScope = $model;
+$changedScope['settings']['cast_other_playthrough'] = true;
+$changedScope['settings']['use_jev'] = true;
+$globalToken = str_repeat('b', 64);
+$changedHtml = renderPage($changedScope, $csrf, null, $globalToken);
+check(str_contains($changedHtml, 'Cast was selected in another playthrough'), 'profile switch explains why tracking needs cast reselection');
+check(preg_match('/name="use_jev" value="1" checked/', $changedHtml) === 1, 'experimental backend selection is shown as a checked control');
+check(str_contains($changedHtml, 'existing CHIM OpenRouter credentials') && str_contains($changedHtml, 'alpha Decisions API'), 'toggle explains credential reuse and experimental status');
+check(substr_count($changedHtml, 'value="'.$globalToken.'"') === 3, 'set/clear key and restart forms use global session CSRF');
 echo "page view checks passed\n";

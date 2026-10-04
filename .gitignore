@@ -3,6 +3,7 @@
 /AGENTS.md
 /docs/superpowers/
 /docs/art/
+/critique.md
 
 # Release assets are uploaded separately from source.
 /dist/
@@ -11,6 +12,8 @@
 /docs/verification/*
 !/docs/verification/release-0.1.1.md
 !/docs/verification/key-encryption-0.1.2.md
+!/docs/verification/critique-fixes-0.1.4.md
+!/docs/verification/jev-toggle-0.1.5.md
 
 # Local credentials, editor files and Python caches.
 .env

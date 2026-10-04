@@ -35,7 +35,7 @@ function parsePageAction(#[\SensitiveParameter] array $post, array $knownNpcIds)
         if (preg_match('#\A[A-Za-z0-9~._/-]{3,100}\z#D', $model) !== 1) {
             throw new UnexpectedValueException('model_invalid');
         }
-        return ['action' => 'save_settings', 'enabled' => ($post['enabled'] ?? null) === '1', 'cast' => $cast, 'model' => $model];
+        return ['action' => 'save_settings', 'enabled' => ($post['enabled'] ?? null) === '1', 'use_jev' => ($post['use_jev'] ?? null) === '1', 'cast' => $cast, 'model' => $model];
     }
     if ($action === 'set_key') {
         $key = is_string($post['api_key'] ?? null) ? trim($post['api_key']) : '';
@@ -94,13 +94,17 @@ function issueFlagMutation(string $issueId, string $flag): callable
 /** Perform a validated action and return only a fixed, safe notice. */
 function performPageAction(Pg $pg, #[\SensitiveParameter] array $action, string $engineRoot, string $pluginDir): string
 {
+    if (in_array($action['action'], ['save_settings', 'issue_flag'], true) && array_key_exists('playthrough_id', $action) && ($action['playthrough_id'] === null || (currentPlaythrough($pg)['id'] ?? null) !== $action['playthrough_id'])) {
+        return 'The playthrough changed; refresh this page before saving.';
+    }
     switch ($action['action']) {
         case 'save_settings':
             $pg->exec('BEGIN');
             $committed = false;
             try {
                 saveSetting($pg, 'enabled', $action['enabled']);
-                saveSetting($pg, 'cast', $action['cast']);
+                saveSetting($pg, 'use_jev', $action['use_jev'] ?? false);
+                saveSetting($pg, 'cast', $action['cast'], $action['playthrough_id'] ?? null);
                 saveSetting($pg, 'model', $action['model']);
                 $pg->exec('COMMIT');
                 $committed = true;
@@ -112,7 +116,10 @@ function performPageAction(Pg $pg, #[\SensitiveParameter] array $action, string 
                     }
                 }
             }
-            if ($action['enabled'] && ensureWorkerRunning($engineRoot, $pluginDir) === 'spawn_failed') {
+            $settings = loadSettings($pg);
+            $pause = workerPauseReason($settings);
+            if ($action['enabled'] && $pause !== null) return 'Settings saved. ' . workerPauseNotice($pause);
+            if ($action['enabled'] && ensureWorkerRunning($engineRoot, $pluginDir, $settings) === 'spawn_failed') {
                 return 'Settings saved, but the worker could not be started.';
             }
             return 'Settings saved.';
@@ -121,12 +128,12 @@ function performPageAction(Pg $pg, #[\SensitiveParameter] array $action, string 
             return 'Decision model key saved.';
         case 'clear_key':
             saveSetting($pg, 'api_key', '');
-            return 'Decision model key removed; the CHIM LLM fallback will be used when available.';
+            return 'Dedicated Jev key removed. Jev uses CHIM OpenRouter credentials when enabled; otherwise the CHIM relationship LLM is used.';
         case 'restart_worker':
-            if (!loadSettings($pg)['enabled']) {
-                return 'Enable the feature before restarting its worker.';
-            }
-            return match (ensureWorkerRunning($engineRoot, $pluginDir)) {
+            $settings = loadSettings($pg);
+            $pause = workerPauseReason($settings);
+            if ($pause !== null) return workerPauseNotice($pause);
+            return match (ensureWorkerRunning($engineRoot, $pluginDir, $settings)) {
                 'running' => 'Worker is already running.',
                 'spawned' => 'Worker restart was attempted.',
                 default => 'Worker restart could not be started.',
@@ -138,7 +145,7 @@ function performPageAction(Pg $pg, #[\SensitiveParameter] array $action, string 
                 return 'That character is not available right now.';
             }
             $status = (new PerspectiveStore($pg))->commitLedger(
-                ['owner_npc_id' => $action['npc_id'], 'owner_name' => $owner['npc_name'], 'playthrough_id' => $playthrough['id'], 'event_ids' => [], 'counterpart_name' => null],
+                ['owner_npc_id' => $action['npc_id'], 'owner_name' => $owner['npc_name'], 'playthrough_id' => $action['playthrough_id'] ?? $playthrough['id'], 'event_ids' => [], 'counterpart_name' => null],
                 issueFlagMutation($action['issue_id'], $action['flag'])
             );
             return match ($status) {

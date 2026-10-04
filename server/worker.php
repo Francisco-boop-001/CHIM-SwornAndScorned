@@ -62,6 +62,7 @@ $lastLore = 0;
 
 sasLog('worker_started', 'info', ['pid' => getmypid()]);
 $errors = 0;
+$paused = null;
 
 while (true) {
     if (!is_file(__FILE__)) {
@@ -78,6 +79,17 @@ while (true) {
             sasLog('worker_stopped', 'info', ['reason' => 'disabled']);
             exit(0);
         }
+        $reason = workerPauseReason($settings);
+        if ($reason !== null) {
+            if ($paused !== $reason) sasLog('worker_paused', 'info', ['reason' => $reason]);
+            $paused = $reason;
+            $errors = 0;
+            if ($once) exit(0);
+            sleep(2);
+            continue;
+        }
+        if ($paused !== null) sasLog('worker_resumed', 'info');
+        $paused = null;
         $worked = workerTick($pg, $settings, time());
         if ($seeds !== [] && time() - $lastLore >= LORE_INTERVAL_SECONDS) {
             $lastLore = time();

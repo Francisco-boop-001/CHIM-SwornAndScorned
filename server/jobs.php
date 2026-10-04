@@ -137,7 +137,7 @@ function processJob(array $job, JobDeps $deps): array
     $status = $deps->commitLedger($request, static fn (array $fresh): array => applyProposal($fresh, $proposal, $meta));
     return match ($status) {
         'committed', 'replay', 'unchanged' => $result('done', $status),
-        'restore_policy' => $result('done', 'restore_policy'),
+        'restore_policy' => $result('paused', 'restore_policy'),
         'busy' => $result('retry', 'owner_busy'),
         'owner_changed', 'playthrough_changed', 'events_missing', 'edge_invalid', 'counterpart_changed', 'disabled', 'cast_changed' => $result('stale', $status),
         default => $result('stale', 'commit_rejected'),

@@ -146,7 +146,32 @@ try {
         }
     }
     check($castEntry !== null && $castEntry['ledger_invalid'] === true && $castEntry['issues'] === [], 'corrupt cast ledger is surfaced as unavailable, not empty or overwritten');
+    $bound = json_decode($pg->one("SELECT value::text AS v FROM sas_it.sworn_scorned_settings WHERE key='cast'")['v'], true);
+    $beforeStalePost = ChimSwornAndScorned\loadSettings($pg);
+    check(str_contains(performPageAction($pg, ['action'=>'save_settings','enabled'=>true,'cast'=>[$counterpartId],'model'=>'other/model','playthrough_id'=>'retired-profile'], '/nonexistent', '/nonexistent'), 'playthrough changed'), 'stale browser action rejects reused NPC IDs');
+    check(ChimSwornAndScorned\loadSettings($pg) === $beforeStalePost, 'stale browser action changes no settings');
+    check($bound === ['ids'=>[$ownerId], 'playthrough_id'=>$scopeId], 'cast save binds row IDs to active playthrough');
+    $pg->exec("UPDATE sas_it.sworn_scorned_settings SET value=$1::jsonb WHERE key='cast'", [json_encode(['ids'=>[$ownerId], 'playthrough_id'=>'retired-profile'])]);
+    check(ChimSwornAndScorned\loadSettings($pg)['cast'] === [], 'reused IDs from another profile never select this NPC');
+    check(buildPageModel($pg, $engineRoot, false)['settings']['cast_other_playthrough'], 'dashboard explains cast belonging to another profile');
+    $pg->exec("UPDATE sas_it.sworn_scorned_settings SET value=$1::jsonb WHERE key='cast'", [json_encode([$ownerId])]);
+    $legacy = buildPageModel($pg, $engineRoot, false);
+    check($legacy['settings']['cast'] === [] && $legacy['settings']['cast_reselect'], 'legacy global cast is disabled with reselection guidance');
+    $GLOBALS['NEVER_CLEAR_RELATIONSHIP_DATA'] = true;
+    $pausedSave = performPageAction($pg, ['action'=>'save_settings','enabled'=>true,'cast'=>[$ownerId],'model'=>'typesafe/jev-1.13'], '/nonexistent', '/nonexistent');
+    check(str_contains($pausedSave, 'Evaluations paused'), 'settings save cannot spawn a worker while restore policy blocks commits');
+    check(str_contains(performPageAction($pg, ['action'=>'restart_worker'], '/nonexistent', '/nonexistent'), 'Queued work is retained'), 'manual restart explains pause without launching');
+    check(str_contains(buildPageModel($pg, $engineRoot, false)['worker']['pause'], 'NEVER_CLEAR_RELATIONSHIP_DATA'), 'dashboard shows actual evaluation pause');
+    unset($GLOBALS['NEVER_CLEAR_RELATIONSHIP_DATA']);
+    $pg->exec('CREATE TABLE sas_it.core_player (LIKE public.core_player INCLUDING ALL)');
+    $pg->exec("INSERT INTO sas_it.core_player(id,value) VALUES ('player_name','')");
+    check(currentPlaythrough($pg) === null, 'empty fixture player name has no resolvable scope');
+    check(str_contains(performPageAction($pg, ['action'=>'clear_key','playthrough_id'=>null], '/nonexistent', '/nonexistent'), 'removed'), 'global key removal works without a playthrough');
+    check(str_contains(performPageAction($pg, ['action'=>'restart_worker','playthrough_id'=>null], '/nonexistent', '/nonexistent'), 'could not'), 'global restart is attempted without a playthrough');
+    check(str_contains(performPageAction($pg, ['action'=>'issue_flag','npc_id'=>$ownerId,'issue_id'=>'abc123abc123abc1','flag'=>'mute','playthrough_id'=>null], '/nonexistent', '/nonexistent'), 'playthrough changed'), 'issue mutations still refuse missing scope');
+    check(str_contains(performPageAction($pg, ['action'=>'save_settings','enabled'=>true,'cast'=>[$ownerId],'model'=>'typesafe/jev-1.13','playthrough_id'=>null], '/nonexistent', '/nonexistent'), 'playthrough changed'), 'cast settings still refuse missing scope');
 } finally {
+    unset($GLOBALS['NEVER_CLEAR_RELATIONSHIP_DATA']);
     $pg->exec('DROP SCHEMA IF EXISTS sas_it CASCADE');
     putenv('SAS_TEST_SCHEMA');
 }
