@@ -14,8 +14,18 @@ check(parsePageAction(['action'=>'save_settings','use_jev'=>'1','model'=>'typesa
 check(parsePageAction(['action' => 'save_settings', 'model' => 'typesafe/jev-1.13'], $known)['enabled'] === false, 'unchecked box disables');
 check(parsePageAction(['action' => 'save_settings', 'cast' => ['3', '3'], 'model' => 'x/y'], $known)['cast'] === [3], 'duplicate known ids are stored once');
 rejected(fn () => parsePageAction(['action' => 'save_settings', 'cast' => ['999'], 'model' => 'x/y'], $known), 'unknown cast id refused');
-rejected(fn () => parsePageAction(['action' => 'save_settings', 'cast' => array_map('strval', range(1, 9)), 'model' => 'x/y'], range(1, 9)), 'cast over 8 refused');
 rejected(fn () => parsePageAction(['action' => 'save_settings', 'cast' => ['3'], 'model' => 'bad model'], $known), 'invalid model refused');
+$allIds = range(1, 132);
+check(parsePageAction(['action'=>'save_settings', 'enabled'=>'1', 'cast'=>array_map('strval', $allIds), 'model'=>'x/y'], $allIds)['cast'] === $allIds, 'all 132 known NPCs are accepted');
+$largeIds = range(1, 1400);
+check(parsePageAction(['action'=>'save_settings', 'cast_json'=>json_encode($largeIds), 'model'=>'x/y'], $largeIds)['cast'] === $largeIds, 'serialized selection bypasses PHP input-variable limits without an application cap');
+check(parsePageAction(['action'=>'save_settings', 'cast_json'=>'[3,3]', 'model'=>'x/y'], $known)['cast'] === [3], 'serialized duplicate IDs are normalized');
+check(parsePageAction(['action'=>'save_settings','cast_json'=>'["9007199254740993"]','model'=>'x/y'], [9007199254740993])['cast'] === [9007199254740993], 'serialized strings preserve valid IDs beyond JavaScript number precision');
+foreach (['null','{}','{"ids":[3]}','[999]','[3,{}]','broken'] as $badCast) {
+    rejected(fn () => parsePageAction(['action'=>'save_settings','cast_json'=>$badCast,'model'=>'x/y'], $known), 'malformed or unknown serialized cast rejected');
+}
+rejected(fn () => parsePageAction(['action'=>'save_settings','cast_form'=>'1','cast'=>['3'],'model'=>'x/y'], $known), 'truncated native checkbox submission is rejected instead of partially saved');
+check(ChimSwornAndScorned\pageActionErrorNotice(new UnexpectedValueException('private diagnostic')) === 'That request was not valid.', 'unrecognized validation errors do not reveal internals');
 
 check(parsePageAction(['action' => 'set_key', 'api_key' => ' sk-or-abc '], $known) === ['action' => 'set_key', 'api_key' => 'sk-or-abc'], 'key trimmed before storage');
 rejected(fn () => parsePageAction(['action' => 'set_key', 'api_key' => 'has space'], $known), 'key with whitespace refused');

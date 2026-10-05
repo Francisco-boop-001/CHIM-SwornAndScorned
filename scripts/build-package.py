@@ -54,6 +54,7 @@ SERVER_FILES = (
     "page_view.php",
     "index.php",
     "assets/style.css",
+    "assets/dashboard.js",
     "dashboard-art.webp",
 )
 PACKAGE_SCHEMA = 4

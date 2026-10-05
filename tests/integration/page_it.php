@@ -65,6 +65,9 @@ try {
 
     ChimSwornAndScorned\ensureSchema($pg);
     $known = knownNpcIds($pg);
+    $allAction = parsePageAction(['action'=>'save_settings','cast_json'=>json_encode($known),'model'=>'typesafe/jev-1.13'], $known);
+    check(performPageAction($pg, $allAction, $engineRoot, __DIR__) === 'Settings saved.', 'select all saves more than eight fixture NPCs');
+    check(ChimSwornAndScorned\loadSettings($pg)['cast'] === $known && count($known) > 8, 'all selected cast IDs survive database reload');
     $settingsAction = parsePageAction(
         ['action' => 'save_settings', 'cast' => [(string) $ownerId], 'model' => 'typesafe/jev-1.13'],
         $known
@@ -109,6 +112,9 @@ try {
     check($model['worker']['last_failure'] === 'http_401', 'last failure is selected from the current playthrough');
     check(count($castEntry['issues']) === 2 && $castEntry['issues'][0]['counterpart_name'] === 'Farkas Fixture', 'NPC counterpart is resolved safely');
     check($castEntry['issues'][1]['counterpart_name'] === 'Hermaeus Mora', 'Daedric counterpart is resolved from lore names');
+    require_once __DIR__ . '/../../server/page_view.php';
+    $directorHtml = ChimSwornAndScorned\renderPage(buildPageModel($pg, $engineRoot, true), str_repeat('a', 64), null);
+    check(!str_contains($directorHtml, '<summary>Issue details</summary>') && str_contains($directorHtml, 'Source: e:10'), 'Director reveals persisted database evidence directly');
 
     $historyCount = static fn (): int => (int) $pg->one('SELECT count(*) AS n FROM sas_it.core_npc_master_history WHERE npc_id = $1', [$ownerId])['n'];
     $historyBefore = $historyCount();

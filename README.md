@@ -6,7 +6,11 @@
 
 ![A broken oath ring lies between two estranged Nords on snowy mead-hall steps; an emo llama watches from the roof.](server/dashboard-art.webp)
 
-**Release: [0.1.5 — PRE-ALPHA](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/tag/sworn_and_scorned-v0.1.5).** Tested on a disposable CHIM server with synthetic fixtures, real model calls, and a simulated game client. **In-game dialogue quality and long-session behaviour remain unverified.** The llama can hold a clipboard; it cannot certify your save.
+**Release: [0.1.6 — PRE-ALPHA](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/tag/sworn_and_scorned-v0.1.6).** Tested on a disposable CHIM server with synthetic fixtures and browser checks, including a 1,400-NPC save. Earlier versions also exercised real model calls and a simulated game client. **In-game dialogue quality and long-session behaviour remain unverified.** The llama can hold a clipboard; it cannot certify your save.
+
+**New in 0.1.6:** removes the eight-NPC cast cap, adds **Select all**, **Clear selection** and a selected count, and shows **Recent activity**. Install the update to change your running server; downloading it alone changes precisely nothing. The llama appreciates the thought.
+
+[0.1.6 changes](distribution/sworn_and_scorned-v0.1.6.md) · [Verification and limits](docs/verification/dashboard-0.1.6.md)
 
 ## What it actually does
 
@@ -22,29 +26,29 @@ It does not set Skyrim relationship ranks, complete quests, transfer items, or g
 
 ## Install: pick one route
 
-**0.1.5 includes encrypted storage for an optional dedicated OpenRouter key.** Reusing CHIM credentials needs no extra key setup. Only dedicated overrides need the private master key described below. Older **0.1.1 packages store saved keys as plaintext**; downloading an update does not change the installed server copy.
+**This release includes encrypted storage for an optional dedicated OpenRouter key.** Reusing CHIM credentials needs no extra key setup. Only dedicated overrides need the private master key described below. Older **0.1.1 packages store saved keys as plaintext**; downloading an update does not change the installed server copy.
 
-This release is **0.1.5 — PRE-ALPHA**. On upgrading from 0.1.2, **reselect and save your cast**: old global NPC IDs are intentionally not carried into another playthrough. Player affinity uses CHIM's canonical `Player` relationship; journal names still use your character's name. **Jev now requires the explicit experimental toggle**, even if you previously saved a plugin key. Existing dedicated keys are retained.
+This release is **0.1.6 — PRE-ALPHA**. On upgrading from 0.1.2, **reselect and save your cast**: old global NPC IDs are intentionally not carried into another playthrough. Player affinity uses CHIM's canonical `Player` relationship; journal names still use your character's name. **Jev now requires the explicit experimental toggle**, even if you previously saved a plugin key. Existing dedicated keys are retained.
 
 This is a **CHIM server extension** using CHIM's existing client. It adds no ESP/ESL, Papyrus companion, or Skyrim plugin slot. You need CHIM support for server-plugin packages, the conversation evidence/hooks this plugin uses, and PHP CLI worker execution on the server. The [verification record](docs/verification/release-0.1.1.md) identifies the tested server; this is not a claim that every historical CHIM build supports it.
 
 | Route | Download | What to do |
 | --- | --- | --- |
-| **MO2** | [MO2 ZIP](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.5/sworn_and_scorned-0.1.5-mo2.zip) | Import as a mod, enable it, and let a compatible CHIM client sync the embedded server package. |
-| **Plugin Manager upload** | [DWPkg](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.5/sworn_and_scorned-0.1.5.dwpkg) | Upload through CHIM's Plugin Manager. The installation route was exercised for 0.1.1; 0.1.5 passed package and isolated runtime checks. |
-| **Repository installer** | [Tar archive](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.5/sworn_and_scorned.tar.gz) | Separate installer format: one `sworn_and_scorned/` wrapper directory is stripped during installation. Catalog-style installation was not exercised. |
+| **MO2** | [MO2 ZIP](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.6/sworn_and_scorned-0.1.6-mo2.zip) | Import as a mod, enable it, and let a compatible CHIM client sync the embedded server package. |
+| **Plugin Manager upload** | [DWPkg](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.6/sworn_and_scorned-0.1.6.dwpkg) | Upload through CHIM's Plugin Manager. The installation route was exercised for 0.1.1; 0.1.6 passed package, isolated runtime and browser checks. |
+| **Repository installer** | [Tar archive](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.6/sworn_and_scorned.tar.gz) | Separate installer format: one `sworn_and_scorned/` wrapper directory is stripped during installation. Catalog-style installation was not exercised. |
 
-[SHA-256 checksums](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.5/SHA256SUMS.txt) · [Release notes](distribution/sworn_and_scorned-v0.1.5.md)
+[SHA-256 checksums](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.6/SHA256SUMS.txt) · [Release notes](distribution/sworn_and_scorned-v0.1.6.md)
 
-The MO2 archive puts `CHIM/server-plugins/sworn_and_scorned/0.1.5.dwpkg` directly under the virtual Data root. **Do not unpack the inner DWPkg into Data.** MO2 may warn that this server-only mod has no recognised game content; it genuinely contains no ESP. No ceremonial dummy plugin has been sacrificed to appease it.
+The MO2 archive puts `CHIM/server-plugins/sworn_and_scorned/0.1.6.dwpkg` directly under the virtual Data root. **Do not unpack the inner DWPkg into Data.** MO2 may warn that this server-only mod has no recognised game content; it genuinely contains no ESP. No ceremonial dummy plugin has been sacrificed to appease it.
 
-**Use one installation source and one enabled version.** Replace an older enabled package rather than stacking versions or letting an old sync package compete with a Plugin Manager update. After installation, verify **0.1.5 in the server's Plugin Manager**, then open **Plugin Page**. A download filename is not running-code evidence. MO2 layout and embedded bytes were verified; automatic MO2-to-server transfer remains untested. No official CHIM catalog listing has been submitted.
+**Use one installation source and one enabled version.** Replace an older enabled package rather than stacking versions or letting an old sync package compete with a Plugin Manager update. After installation, verify **0.1.6 in the server's Plugin Manager**, then open **Plugin Page**. A download filename is not running-code evidence. MO2 layout and embedded bytes were verified; automatic MO2-to-server transfer remains untested. No official CHIM catalog listing has been submitted.
 
 ## Setup: nominate your disasters
 
 1. Open Sworn & Scorned's **Plugin Page**.
 2. Enable it; the feature starts **off**.
-3. Select up to **eight NPCs** as the conversation cast and save. Without a cast, speech is not queued. Issues belong to NPC owners; the player or another NPC can be the counterpart.
+3. Select the NPCs to track and **Save settings**. There is no plugin-imposed cast cap: select any number of known NPCs. **Select all** selects the current list; it does not save automatically or enrol future NPCs. More eligible conversations mean more queued work and potential API charges. Without a cast, speech is not queued. Issues belong to NPC owners; the player or another NPC can be the counterpart.
 4. Leave **Use Jev — experimental** off for your CHIM relationship LLM, or enable it to reuse CHIM's OpenRouter credentials.
 5. Check backend availability and worker status. Use **Restart worker** if needed.
 
@@ -113,6 +117,8 @@ The default journal keeps evidence collapsed. **Director view** reveals the deta
 
 Opening evidence or Director view reveals the ledger. The default view avoids immediately spilling the details; it is not a secrecy mechanism.
 
+Director reveals **recorded** issues and their evidence; it does not generate drama on demand. With an empty ledger, there is nothing to reveal. The 0.1.6 page says that explicitly, because clicking a mysterious button and getting the same nothing is not an interface feature.
+
 ## Lore grudges: locally sourced resentment
 
 Ten directional starting-state seeds ship for eight NPC owners:
@@ -142,6 +148,8 @@ The candidate deliberately pauses evaluation while **`NEVER_CLEAR_RELATIONSHIP_D
 The CHIM fallback runs in a fresh PHP CLI process with a **20-second total deadline per model call**, supervised by Linux's **`/usr/bin/timeout`**. It reloads the connector key inside that child; credentials do not travel through command arguments or its input pipe. Linux CLI, `proc_open` and that executable are required; unavailable execution fails closed. This was tested on the disposable WSL server. It also means a provider cannot keep the one worker hostage by dribbling out bytes forever.
 
 **Plugin logs omit raw dialogue, prompts, provider responses and credentials.** CHIM core can log full prompts; providers receive the conversation evidence needed for evaluation. Their retention is outside this plugin. This is not a private-conversation vault wearing a llama sticker.
+
+In 0.1.6, plugin records use UTC timestamps, a schema version, fixed event/reason codes and validated IDs/counts. Settings saves, rejected forms, key changes (never the key), worker events and job duration are visible in CHIM's `log/chim.log`; worker stdout/stderr still use `log/sworn_scorned_worker.log`. **Recent activity** shows the newest 50 safe plugin records within the last 256 KiB, across playthroughs; reload to refresh. CHIM owns log retention and access permissions. Restricted log levels or an unavailable logger can hide ordinary events; PHP's error log is the fallback. Logging failures never prevent an evaluation or settings save.
 
 On **0.1.2**, saved plugin keys use authenticated **libsodium secretbox** encryption with a fresh random nonce on every save. The database contains a versioned ciphertext envelope, while the master key stays in the separate private file above. Keys are never prefilled on the page. Provider requests use HTTPS. Page access requires exact localhost without forwarded headers or a server-authenticated user; mutations use CSRF protection. Remote key entry additionally requires HTTPS recognised by the web server. Direct localhost HTTP remains available for local setup; client-supplied forwarded-protocol headers cannot authorise key entry. TLS-terminating proxies must configure trustworthy server HTTPS state.
 

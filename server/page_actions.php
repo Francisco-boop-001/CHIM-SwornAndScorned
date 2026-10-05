@@ -8,6 +8,17 @@ use UnexpectedValueException;
 require_once __DIR__ . '/tables.php';
 require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/launcher.php';
+require_once __DIR__ . '/logging.php';
+
+/** User-facing validation text: expose only recognised fixed messages. */
+function pageActionErrorNotice(UnexpectedValueException $error): string
+{
+    return match ($error->getMessage()) {
+        'cast_invalid' => 'The cast selection was not valid. Refresh this page and select known NPCs. Settings were not saved.',
+        'model_invalid' => 'The Jev model name was not valid. Settings were not saved.',
+        default => 'That request was not valid.',
+    };
+}
 
 /** @param list<int> $knownNpcIds */
 function parsePageAction(#[\SensitiveParameter] array $post, array $knownNpcIds): array
@@ -15,27 +26,35 @@ function parsePageAction(#[\SensitiveParameter] array $post, array $knownNpcIds)
     $action = $post['action'] ?? null;
     if ($action === 'save_settings') {
         $rawCast = $post['cast'] ?? [];
+        if (isset($post['cast_form']) && ($post['cast_complete'] ?? null) !== '1') {
+            throw new UnexpectedValueException('cast_invalid');
+        }
+        // One form field avoids PHP max_input_vars truncating a large selection.
+        if (array_key_exists('cast_json', $post)) {
+            try {
+                if (!is_string($post['cast_json'])) throw new \JsonException();
+                $rawCast = json_decode($post['cast_json'], false, 16, JSON_THROW_ON_ERROR);
+            } catch (\JsonException) {
+                throw new UnexpectedValueException('cast_invalid');
+            }
+        }
         if (!is_array($rawCast) || !array_is_list($rawCast)) {
             throw new UnexpectedValueException('cast_invalid');
         }
         $cast = [];
+        $known = array_fill_keys($knownNpcIds, true);
         foreach ($rawCast as $value) {
             $id = filter_var($value, FILTER_VALIDATE_INT);
-            if (!is_int($id) || $id < 1 || !in_array($id, $knownNpcIds, true)) {
+            if (!is_int($id) || $id < 1 || !isset($known[$id])) {
                 throw new UnexpectedValueException('cast_invalid');
             }
-            if (!in_array($id, $cast, true)) {
-                $cast[] = $id;
-            }
-        }
-        if (count($cast) > MAX_CAST) {
-            throw new UnexpectedValueException('cast_too_large');
+            $cast[$id] = $id;
         }
         $model = is_string($post['model'] ?? null) ? trim($post['model']) : '';
         if (preg_match('#\A[A-Za-z0-9~._/-]{3,100}\z#D', $model) !== 1) {
             throw new UnexpectedValueException('model_invalid');
         }
-        return ['action' => 'save_settings', 'enabled' => ($post['enabled'] ?? null) === '1', 'use_jev' => ($post['use_jev'] ?? null) === '1', 'cast' => $cast, 'model' => $model];
+        return ['action' => 'save_settings', 'enabled' => ($post['enabled'] ?? null) === '1', 'use_jev' => ($post['use_jev'] ?? null) === '1', 'cast' => array_values($cast), 'model' => $model];
     }
     if ($action === 'set_key') {
         $key = is_string($post['api_key'] ?? null) ? trim($post['api_key']) : '';
@@ -116,6 +135,7 @@ function performPageAction(Pg $pg, #[\SensitiveParameter] array $action, string 
                     }
                 }
             }
+            sasLog('settings_saved', 'info', ['cast_count' => count($action['cast']), 'enabled' => $action['enabled'], 'use_jev' => $action['use_jev'] ?? false]);
             $settings = loadSettings($pg);
             $pause = workerPauseReason($settings);
             if ($action['enabled'] && $pause !== null) return 'Settings saved. ' . workerPauseNotice($pause);
@@ -125,11 +145,14 @@ function performPageAction(Pg $pg, #[\SensitiveParameter] array $action, string 
             return 'Settings saved.';
         case 'set_key':
             saveSetting($pg, 'api_key', $action['api_key']);
+            sasLog('key_updated', 'info');
             return 'Decision model key saved.';
         case 'clear_key':
             saveSetting($pg, 'api_key', '');
+            sasLog('key_removed', 'info');
             return 'Dedicated Jev key removed. Jev uses CHIM OpenRouter credentials when enabled; otherwise the CHIM relationship LLM is used.';
         case 'restart_worker':
+            sasLog('worker_restart_requested', 'info');
             $settings = loadSettings($pg);
             $pause = workerPauseReason($settings);
             if ($pause !== null) return workerPauseNotice($pause);

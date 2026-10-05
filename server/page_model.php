@@ -11,6 +11,7 @@ require_once __DIR__ . '/launcher.php';
 require_once __DIR__ . '/llm_connector.php';
 require_once __DIR__ . '/lore.php';
 require_once __DIR__ . '/vocab.php';
+require_once __DIR__ . '/logging.php';
 
 function knownNpcIds(Pg $pg): array
 {
@@ -226,6 +227,7 @@ function buildPageModel(Pg $pg, string $engineRoot, bool $director): array
         ],
         'journal' => $normalizedRows,
         'director' => $director,
+        'activity' => recentPluginLogs($engineRoot),
         'art' => is_file(__DIR__ . '/dashboard-art.webp'),
     ];
 }

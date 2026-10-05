@@ -8,8 +8,16 @@ require_once __DIR__ . '/page_actions.php';
 require_once __DIR__ . '/page_model.php';
 require_once __DIR__ . '/page_view.php';
 
+$engineRoot = dirname(__DIR__, 2);
+try {
+    require_once $engineRoot . '/lib/logger.php';
+} catch (\Throwable) {
+    // Logging stays best-effort; PHP's error log remains the fallback.
+}
+
 function pageUnavailable(): never
 {
+    sasLog('form_rejected', 'error', ['reason' => 'internal_error']);
     http_response_code(503);
     header('Content-Type: text/plain; charset=UTF-8');
     echo "The CHIM page is temporarily unavailable.\n";
@@ -23,6 +31,7 @@ if (!pageAccessAllowed($_SERVER)) {
         header('Location: ' . $handoff, true, 302);
         exit;
     }
+    sasLog('access_rejected', 'warning');
     http_response_code(403);
     header('Content-Type: text/plain; charset=UTF-8');
     echo "Forbidden. Open this page through localhost (replace the host in your CHIM URL with localhost).\n";
@@ -50,7 +59,6 @@ try {
     pageUnavailable();
 }
 
-$engineRoot = dirname(__DIR__, 2);
 set_error_handler(static function (int $severity): bool {
     if ((error_reporting() & $severity) === 0) {
         return false;
@@ -84,6 +92,7 @@ if ($method === 'POST') {
     if (!csrfTokenValid(pageActionToken($csrf, $postedScope, $_POST['action'] ?? null), $_POST['csrf'] ?? null)) {
         http_response_code(400);
         $notice = 'The form expired; please try again.';
+        sasLog('form_rejected', 'warning', ['reason' => 'csrf_invalid']);
     } else {
         try {
             $action = parsePageAction($_POST, knownNpcIds($pg));
@@ -91,15 +100,18 @@ if ($method === 'POST') {
             if ($action['action'] === 'set_key' && !keySubmissionAllowed($_SERVER)) {
                 http_response_code(403);
                 $notice = 'Use HTTPS or direct localhost to save a key.';
+                sasLog('access_rejected', 'warning');
             } else {
                 $notice = performPageAction($pg, $action, $engineRoot, __DIR__);
             }
         } catch (KeyStorageError) {
             http_response_code(503);
             $notice = 'Key storage unavailable. Provision or restore the private master key before saving a key.';
-        } catch (\UnexpectedValueException) {
+            sasLog('form_rejected', 'error', ['reason' => 'key_storage_unavailable']);
+        } catch (\UnexpectedValueException $error) {
             http_response_code(400);
-            $notice = 'That request was not valid.';
+            $notice = pageActionErrorNotice($error);
+            sasLog('settings_rejected', 'warning', ['reason' => $error->getMessage()]);
         } catch (\Throwable) {
             pageUnavailable();
         }

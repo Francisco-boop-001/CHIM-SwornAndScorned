@@ -14,6 +14,7 @@
 !/docs/verification/key-encryption-0.1.2.md
 !/docs/verification/critique-fixes-0.1.4.md
 !/docs/verification/jev-toggle-0.1.5.md
+!/docs/verification/dashboard-0.1.6.md
 
 # Local credentials, editor files and Python caches.
 .env

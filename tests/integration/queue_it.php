@@ -100,6 +100,24 @@ try {
     check(scanOnce($pg, $pt, $settings, $now) === 0, 'young unacknowledged line holds the scan');
     $cursorAfter = (int) $pg->one('SELECT last_rowid FROM sas_it.sworn_scorned_cursor WHERE playthrough_id = $1', ['pt-it'])['last_rowid'];
     check($cursorAfter >= $cursorBefore && $cursorAfter < $e4, 'cursor does not pass the unacknowledged line');
+    $scope = ChimSwornAndScorned\currentPlaythrough($pg);
+    check($scope !== null, 'current clone scope available for worker diagnostic');
+    $diagnosticJob = (int) $pg->one("INSERT INTO sas_it.sworn_scorned_jobs (playthrough_id, owner_npc_id, owner_name, counterpart_name, event_ids)
+        VALUES ($1, 900001, 'Lydia IT', 'Missing IT', '{}'::bigint[]) RETURNING id", [$scope['id']])['id'];
+    $log = tempnam(sys_get_temp_dir(), 'sas-duration-');
+    $previousLog = ini_get('error_log');
+    ini_set('error_log', $log);
+    if (class_exists('Logger', false)) \Logger::setCustomLog($log);
+    try {
+        $noProvider = static function (): never { throw new RuntimeException('provider must not run'); };
+        check(ChimSwornAndScorned\workerTick($pg, $settings, $now, $noProvider, $noProvider), 'worker processes stale fixture without a provider');
+        $record = (string) file_get_contents($log);
+        check(preg_match('/"duration_ms":([0-9]+)/', $record) === 1 && str_contains($record, '"job_id":'.$diagnosticJob) && str_contains($record, '"reason":"events_missing"'), 'completed worker event includes duration and safe correlation diagnostics');
+    } finally {
+        ini_set('error_log', (string) $previousLog);
+        if (class_exists('Logger', false)) \Logger::unsetCustomLog();
+        unlink($log);
+    }
 } finally {
     $pg->exec('DROP SCHEMA IF EXISTS sas_it CASCADE');
     putenv('SAS_TEST_SCHEMA');

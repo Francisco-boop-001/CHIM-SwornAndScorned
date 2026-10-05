@@ -10,7 +10,6 @@ require_once __DIR__ . '/key_crypto.php';
 require_once __DIR__ . '/llm_connector.php';
 
 const DEFAULT_SETTINGS = ['enabled' => false, 'use_jev' => false, 'cast' => [], 'model' => 'typesafe/jev-1.13', 'api_key' => ''];
-const MAX_CAST = 8;
 
 function sasTable(string $name): string
 {
@@ -71,15 +70,15 @@ function normalizeSettings(array $settings): array
     $cast = [];
     foreach (is_array($settings['cast'] ?? null) ? $settings['cast'] : [] as $id) {
         $id = filter_var($id, FILTER_VALIDATE_INT);
-        if (is_int($id) && $id > 0 && !in_array($id, $cast, true)) {
-            $cast[] = $id;
+        if (is_int($id) && $id > 0) {
+            $cast[$id] = $id;
         }
     }
     $model = $settings['model'] ?? null;
     return [
         'enabled' => ($settings['enabled'] ?? false) === true,
         'use_jev' => ($settings['use_jev'] ?? false) === true,
-        'cast' => array_slice($cast, 0, MAX_CAST),
+        'cast' => array_values($cast),
         'model' => is_string($model) && preg_match('#\A[A-Za-z0-9~._/-]{3,100}\z#D', $model) === 1 ? $model : DEFAULT_SETTINGS['model'],
         'api_key' => is_string($settings['api_key'] ?? null) ? trim($settings['api_key']) : '',
     ];

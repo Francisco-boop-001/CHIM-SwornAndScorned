@@ -229,6 +229,7 @@ function workerTick(Pg $pg, #[\SensitiveParameter] array $settings, int $now, ?c
         return false;
     }
     $deps = new PgJobDeps($pg, new PerspectiveStore($pg), $playthrough, $settings, $transport ?? curlTransport(), $completion ?? relationshipConnectorCompletion(1024, $job['owner_name'], $playthrough['player_name']));
+    $started = hrtime(true);
     try {
         $result = processJob($job, $deps);
     } catch (\Throwable) {
@@ -238,6 +239,7 @@ function workerTick(Pg $pg, #[\SensitiveParameter] array $settings, int $now, ?c
     sasLog('job_finished', $result['outcome'] === 'failed' ? 'warning' : 'info', [
         'job_id' => $job['id'], 'owner_npc_id' => $job['owner_npc_id'], 'outcome' => $result['outcome'],
         'reason' => $result['reason'], 'backend' => $job['backend'], 'failures' => $job['failures'],
+        'duration_ms' => (int) ((hrtime(true) - $started) / 1000000),
     ]);
     return true;
 }

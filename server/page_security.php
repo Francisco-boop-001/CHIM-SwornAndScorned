@@ -9,7 +9,7 @@ function sendSecurityHeaders(): void
     header('X-Content-Type-Options: nosniff');
     header('Referrer-Policy: no-referrer');
     header('X-Frame-Options: SAMEORIGIN');
-    header("Content-Security-Policy: default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'self'; base-uri 'none'");
+    header("Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'self'; base-uri 'none'");
 }
 
 /** Only loopback without forwarding headers, or a server-authenticated user, can open this key-bearing page. */

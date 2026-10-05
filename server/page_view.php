@@ -75,7 +75,7 @@ function renderPage(array $model, string $csrf, ?string $notice, ?string $global
     $jobs = $worker['jobs'];
     $director = ($model['director'] ?? false) === true;
     $out = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-        . '<title>Sworn &amp; Scorned</title><link rel="stylesheet" href="assets/style.css"></head><body><main>'
+        . '<title>Sworn &amp; Scorned</title><link rel="stylesheet" href="assets/style.css"><script src="assets/dashboard.js" defer></script></head><body><main>'
         . '<header><h1>Sworn &amp; Scorned</h1><p class="subtitle">Part of the World of Drama-Llama</p></header>';
     if (!empty($model['art'])) {
         $out .= '<img class="art" src="dashboard-art.webp" alt="A Nord offers an open hand on snowy mead-hall steps; a woman above him turns away; a snapped oath ring lies between them.">';
@@ -94,12 +94,14 @@ function renderPage(array $model, string $csrf, ?string $notice, ?string $global
         . '<label><input type="checkbox" name="use_jev" value="1"' . (!empty($settings['use_jev']) ? ' checked' : '') . '> Use Jev — experimental</label>'
         . '<p>Jev handles promise and grievance decisions faster, reducing calls to your usual relationship LLM. It uses your existing CHIM OpenRouter credentials and incurs API charges. Experimental: its interpretation of Skyrim conversations has limited validation, and it uses OpenRouter\'s alpha Decisions API. Failed requests can fall back to your configured relationship LLM.</p>'
         . '<label>Jev decision model <input name="model" value="' . h((string) $settings['model']) . '"></label>'
-        . '<fieldset><legend>Cast (up to 8)</legend><div class="cast">';
+        . '<input type="hidden" name="cast_form" value="1"><fieldset id="cast-picker" aria-describedby="cast-help"><legend>Cast</legend><p id="cast-help" class="notice">Choose any number of known NPCs. More tracked conversations mean more background work and possible API charges. Select all chooses the NPCs listed now; newly discovered NPCs need selecting later. Save settings applies your cast, Enabled and Jev choices.</p>'
+        . '<div class="actions"><button type="button" id="cast-all" hidden>Select all</button><button type="button" id="cast-clear" hidden>Clear selection</button></div>'
+        . '<p id="cast-count" aria-live="polite">' . count(array_intersect($settings['cast'], array_column($model['npcs'], 'id'))) . ' of ' . count($model['npcs']) . ' selected</p><div class="cast">';
     foreach ($model['npcs'] as $npc) {
         $checked = in_array($npc['id'], $settings['cast'], true) ? ' checked' : '';
         $out .= '<label><input type="checkbox" name="cast[]" value="' . (int) $npc['id'] . '"' . $checked . '> ' . h((string) $npc['name']) . '</label>';
     }
-    $out .= '</div></fieldset><button type="submit">Save settings</button></form>';
+    $out .= '</div><input type="hidden" name="cast_complete" value="1"></fieldset><button type="submit">Save settings</button></form>';
     $out .= '<details><summary>Advanced: optional dedicated Jev key</summary><p>Normally Jev reuses the enabled CHIM OpenRouter relationship connector\'s key. A dedicated key overrides it for separate spending limits. Saving a key does not enable Jev.</p>';
     if (!empty($settings['key_error'])) {
         $out .= '<p class="notice">Saved Jev override unavailable. Jev evaluations are blocked while it is selected; the default CHIM mode remains available. Restore the private master key, or remove the saved key before replacing it.</p>';
@@ -124,11 +126,11 @@ function renderPage(array $model, string $csrf, ?string $notice, ?string $global
     }
     $out .= '<form method="post">' . csrfField($globalCsrf) . '<input type="hidden" name="action" value="restart_worker"><button type="submit">Attempt worker restart</button></form></section>';
 
-    $out .= '<section><h2>Journal</h2><p class="meta">' . ($director
-        ? 'Director view: everything is shown. <a href="?">Spoiler-safe view</a>'
+    $out .= '<section><h2>' . ($director ? 'Journal — Director view' : 'Journal') . '</h2><p class="meta">' . ($director
+        ? 'Director view reveals recorded issue details and evidence; it does not generate issues. <a href="?">Spoiler-safe view</a>'
         : 'Spoiler-safe view: issue details stay closed until opened. <a href="?view=director">Director view</a>') . '</p>';
-    if ($model['journal'] === []) {
-        $out .= '<p>No issues yet.</p>';
+    if (!array_filter($model['journal'], static fn (array $entry): bool => !empty($entry['issues']) || !empty($entry['ledger_invalid']))) {
+        $out .= '<p>No recorded issues to reveal yet. Enable tracking, select a cast and save settings; issues appear after relevant conversations are evaluated.</p>';
     }
     foreach ($model['journal'] as $entry) {
         $out .= '<h3>' . h((string) $entry['name']) . '</h3>';
@@ -146,6 +148,23 @@ function renderPage(array $model, string $csrf, ?string $notice, ?string $global
         foreach ($entry['issues'] as $issue) {
             $out .= renderIssue($issue, (int) $entry['npc_id'], $csrf, $director);
         }
+    }
+    $out .= '</section><section><h2>Recent activity</h2><p class="meta">Latest 50 plugin events from CHIM’s log. Times are UTC. Reload to refresh; dialogue, prompts and keys are excluded. This view covers all playthroughs.</p>';
+    $activity = $model['activity'] ?? ['status' => 'available', 'entries' => []];
+    if (($activity['status'] ?? '') !== 'available') {
+        $out .= '<p>' . (($activity['status'] ?? '') === 'missing' ? 'No plugin events yet; CHIM’s log file has not been created.' : 'CHIM’s log is unavailable; check server permissions.') . '</p>';
+    } elseif (empty($activity['entries'])) {
+        $out .= '<p>No plugin events in the recent log window. Save settings or run evaluations to produce activity.</p>';
+    } else {
+        $out .= '<ul>';
+        foreach ($activity['entries'] as $entry) {
+            $details = [];
+            foreach (['job_id', 'owner_npc_id', 'npc_id', 'issue_id', 'outcome', 'reason', 'backend', 'cast_count', 'enabled', 'use_jev', 'duration_ms', 'jobs', 'failures', 'status'] as $field) {
+                if (isset($entry[$field]) && is_scalar($entry[$field])) $details[] = $field . '=' . (is_bool($entry[$field]) ? ($entry[$field] ? 'true' : 'false') : (string) $entry[$field]);
+            }
+            $out .= '<li><time>' . h((string) ($entry['timestamp'] ?? '')) . '</time> · ' . h((string) ($entry['level'] ?? 'info')) . ' · ' . h((string) ($entry['event'] ?? 'unknown')) . ' <span class="meta">' . h(implode(' · ', $details)) . '</span></li>';
+        }
+        $out .= '</ul>';
     }
     return $out . '</section></main></body></html>';
 }
