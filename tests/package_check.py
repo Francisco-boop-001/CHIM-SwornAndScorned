@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import configparser
 import hashlib
+import io
 import json
 import subprocess
 import sys
 import tempfile
+import tarfile
 import unittest
 import uuid
 from pathlib import Path
@@ -56,6 +59,37 @@ SERVER_FILES = (
 
 
 class PackageCheck(unittest.TestCase):
+    def test_mo2_metadata_and_reproducible_release_assets(self) -> None:
+        manifest = json.loads((ROOT / "server" / "manifest.json").read_text(encoding="utf-8"))
+        name, version = manifest["name"], manifest["version"]
+        EVIDENCE.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".sas-mo2-check-", dir=EVIDENCE) as directory:
+            releases = [Path(directory) / suffix for suffix in ("first", "second")]
+            for release in releases:
+                result = subprocess.run(
+                    [sys.executable, str(ROOT / "scripts/build-package.py"), "--format", "release", "--release-dir", str(release)],
+                    cwd=ROOT, capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            for asset in releases[0].iterdir():
+                self.assertEqual(asset.read_bytes(), (releases[1] / asset.name).read_bytes(), asset.name)
+            with ZipFile(releases[0] / f"{name}-{version}-mo2.zip") as archive:
+                member = f"CHIM/server-plugins/{name}/{version}.dwpkg"
+                self.assertEqual(set(archive.namelist()), {"meta.ini", member})
+                self.assertIsNone(archive.testzip())
+                metadata = configparser.ConfigParser(interpolation=None)
+                metadata.read_string(archive.read("meta.ini").decode("utf-8"))
+                self.assertEqual(dict(metadata["General"]), {
+                    "version": version, "repository": "GitHub", "hascustomurl": "true",
+                    "url": f"https://github.com/{manifest['git_repo']}", "validated": "true",
+                })
+                package = archive.read(member)
+                self.assertEqual(package, (releases[0] / f"{name}-{version}.dwpkg").read_bytes())
+                with ZipFile(io.BytesIO(package)) as inner:
+                    self.assertNotIn("meta.ini", inner.namelist())
+            with tarfile.open(releases[0] / f"{name}.tar.gz", "r:gz") as archive:
+                self.assertFalse(any(Path(path).name == "meta.ini" for path in archive.getnames()))
+
     def test_dwpkg_members_manifest_checksums_and_source_bytes(self) -> None:
         manifest = json.loads((ROOT / "server" / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["name"], "sworn_and_scorned")

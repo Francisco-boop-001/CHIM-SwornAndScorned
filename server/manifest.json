@@ -1,6 +1,6 @@
 {
   "name": "sworn_and_scorned",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "schema_version": 2,
   "git_repo": "Francisco-boop-001/CHIM-SwornAndScorned",
   "description": "PRE-ALPHA: Persistent grievances and promises between NPCs and the player, judged asynchronously by a decision model and surfaced quietly in conversation. Opt-in.",

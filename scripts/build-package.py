@@ -279,7 +279,7 @@ def build_repository_archive(project_root: Path, archive_path: Path) -> dict:
 
 
 def build_mo2_sync_archive(project_root: Path, archive_path: Path) -> dict:
-    """Build a plain MO2 ZIP with exactly one CHIM server-plugin destination."""
+    """Build an MO2 ZIP with manager metadata and one CHIM sync package."""
     root = Path(project_root).resolve()
     output = Path(archive_path).resolve()
     try:
@@ -299,17 +299,25 @@ def build_mo2_sync_archive(project_root: Path, archive_path: Path) -> dict:
         wrapper_path = temporary_root / output.name
         build_package(root, package_path)
         package_bytes = package_path.read_bytes()
+        entries = {
+            "meta.ini": (
+                f"[General]\nversion={version}\nrepository=GitHub\nhasCustomURL=true\n"
+                f"url=https://github.com/{plugin_manifest['git_repo']}\nvalidated=true\n"
+            ).encode("utf-8"),
+            member_name: package_bytes,
+        }
         with ZipFile(wrapper_path, "w", compression=ZIP_DEFLATED, compresslevel=9) as archive:
-            info = ZipInfo(member_name, date_time=(1980, 1, 1, 0, 0, 0))
-            info.compress_type = ZIP_DEFLATED
-            info.create_system = 3
-            info.external_attr = (stat.S_IFREG | 0o644) << 16
-            archive.writestr(info, package_bytes)
+            for path, contents in entries.items():
+                info = ZipInfo(path, date_time=(1980, 1, 1, 0, 0, 0))
+                info.compress_type = ZIP_DEFLATED
+                info.create_system = 3
+                info.external_attr = (stat.S_IFREG | 0o644) << 16
+                archive.writestr(info, contents)
         with ZipFile(wrapper_path) as archive:
-            if archive.namelist() != [member_name] or archive.testzip() is not None:
-                raise PackageError("MO2 ZIP does not contain exactly one valid CHIM sync package")
-            if archive.read(member_name) != package_bytes:
-                raise PackageError("MO2 ZIP changed the CHIM sync package bytes")
+            if archive.namelist() != list(entries) or archive.testzip() is not None:
+                raise PackageError("MO2 ZIP must contain metadata and exactly one valid CHIM sync package")
+            if any(archive.read(path) != contents for path, contents in entries.items()):
+                raise PackageError("MO2 ZIP changed its metadata or CHIM sync package bytes")
         os.replace(wrapper_path, output)
     return plugin_manifest
 
