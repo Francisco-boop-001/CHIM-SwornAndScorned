@@ -6,6 +6,7 @@ namespace ChimSwornAndScorned;
 use UnexpectedValueException;
 
 require_once __DIR__ . '/vocab.php';
+require_once __DIR__ . '/substance.php';
 
 const MAX_SEEDED = 512;
 
@@ -86,7 +87,7 @@ function validateIssue(mixed $issue): array
             throw new UnexpectedValueException('issue_flag_invalid');
         }
     }
-    return [
+    $validated = [
         'id' => $id,
         'origin' => requireEnum($issue, 'origin', ORIGINS),
         'kind' => $kind,
@@ -103,6 +104,14 @@ function validateIssue(mixed $issue): array
         'dismissed' => ($issue['dismissed'] ?? false) === true,
         'changed_event_id' => $changed,
     ];
+    if (array_key_exists('substance', $issue)) {
+        $substance = validateSubstance($issue['substance']);
+        if ($substance !== null && $substance['settlement']['mode'] === 'complete_obligation' && !$isPromise) {
+            throw new UnexpectedValueException('issue_substance_invalid');
+        }
+        $validated['substance'] = $substance;
+    }
+    return $validated;
 }
 
 function validateEvidence(mixed $entry): array

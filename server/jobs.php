@@ -127,6 +127,7 @@ function processJob(array $job, JobDeps $deps): array
         'event_ids' => $eventIds,
         'counterpart_name' => $counterpartName,
         'counterpart_key' => $counterpart,
+        'source_lines' => $lines,
     ];
     $meta = [
         'event_ids' => $eventIds,

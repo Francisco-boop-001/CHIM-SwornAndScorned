@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace ChimSwornAndScorned;
 
 require_once __DIR__ . '/vocab.php';
+require_once __DIR__ . '/substance.php';
 
 const PROMISE_STATUS_CHOICES = ['fulfilled', 'broken', 'renegotiated', 'released', 'disputed', 'no_change'];
 const GRIEVANCE_STATUS_CHOICES = ['resolved', 'let_go', 'no_change'];
@@ -36,12 +37,50 @@ function issueSummary(array $issue, string $owner, string $counterpart): string
         $issue['direction'] === 'owed_by_me' => "{$owner} promised {$counterpart} something",
         default => "{$counterpart} promised {$owner} something",
     };
-    $what .= ' (status: ' . $issue['status'] . ($issue['kind'] === 'promise' ? '; strength: ' . $issue['strength'] : '') . ')';
+    $what .= ' (status: ' . $issue['status'] . ($issue['kind'] === 'promise' ? '; strength: ' . $issue['strength'] : '');
+    $substance = $issue['substance'] ?? null;
+    if (!is_array($substance)) {
+        $what .= '; structured terms not recorded; use original evidence for any known matter or remedy';
+    } else {
+        $matter = $substance['matter'] ?? null;
+        $what .= '; nature: ' . ($substance['nature'] ?? 'unknown')
+            . '; matter: ' . (is_array($matter) ? $matter['ref'] . ' ' . $matter['speaker'] . ': "' . $matter['text'] . '"' : 'unknown');
+        $settlement = $substance['settlement'] ?? [];
+        $mode = $settlement['mode'] ?? 'unknown';
+        $source = $settlement['source'] ?? null;
+        $settlementText = match ($mode) {
+            'explicit' => is_array($source) ? $source['ref'] . ' ' . $source['speaker'] . ': "' . $source['text'] . '"' : 'unknown',
+            'complete_obligation' => 'completion of the complete obligation',
+            default => 'unknown',
+        };
+        $what .= '; settlement: ' . $settlementText;
+        $context = $substance['context'] ?? null;
+        if (is_array($context) && $context !== []) {
+            $contextLines = [];
+            foreach ($context as $entry) {
+                $contextLines[] = $entry['ref'] . ' ' . $entry['speaker'] . ': "' . $entry['text'] . '"';
+            }
+            $what .= '; originating exchange (may contain unrelated topics; selected matter anchors this issue): '
+                . implode(' | ', $contextLines);
+        }
+    }
+    $what .= ')';
     if ($issue['evidence'] === []) return $what;
     $origin = $issue['evidence'][0];
     $latest = $issue['evidence'][array_key_last($issue['evidence'])];
     return "{$what}; originally: \"{$origin['quote']}\""
         . (count($issue['evidence']) > 1 ? "; latest: \"{$latest['quote']}\"" : '');
+}
+
+function issueTarget(array $issue): string
+{
+    $matter = $issue['substance']['matter'] ?? null;
+    if (is_array($matter)) {
+        return 'Target issue ' . $issue['id'] . '; selected matter ' . $matter['ref'] . ' ' . $matter['speaker']
+            . ': "' . $matter['text'] . '"';
+    }
+    $origin = $issue['evidence'][0]['quote'] ?? 'original evidence not recorded';
+    return 'Target issue ' . $issue['id'] . '; original quote: "' . $origin . '"';
 }
 
 /**
@@ -57,7 +96,13 @@ function buildState(array $ctx): array
     foreach ($ctx['open_issues'] as $issue) {
         $issues[$issue['id']] = issueSummary($issue, $ctx['owner'], $ctx['counterpart']);
     }
-    return ['owner' => $ctx['owner'], 'counterpart' => $ctx['counterpart'], 'lines' => $lines, 'open_issues' => $issues];
+    return [
+        'owner' => $ctx['owner'],
+        'counterpart' => $ctx['counterpart'],
+        'lines' => $lines,
+        'substance_candidates' => substanceCandidates($ctx['lines']),
+        'open_issues' => $issues,
+    ];
 }
 
 function pass1Questions(array $ctx): array
@@ -68,12 +113,20 @@ function pass1Questions(array $ctx): array
     foreach ($ctx['open_issues'] as $issue) {
         $questions[] = noul(
             "addresses:{$issue['id']}",
-            "Do these lines address this open matter between {$owner} and {$counterpart}: "
-            . issueSummary($issue, $owner, $counterpart) . '?'
+            "Do these lines specifically discuss, fulfil, dispute or settle the original harm or obligation in this matter between {$owner} and {$counterpart}? "
+            . issueTarget($issue) . ' '
+            . 'Match the actual subject in the original evidence. Shared names, affectionate insults, playful rivalry, unrelated gifts and generic apologies alone do not address it. '
+            . 'Partial payment, delivery or progress, and a change or renegotiation of the same agreement still address that original matter even when it is not complete. An explicit acknowledgement that the original wrong was repaired or the promised action was completed also addresses it. Matter: '
+            . issueSummary($issue, $owner, $counterpart)
         );
     }
     $questions[] = noul('commitment', "In these lines, does {$owner} or {$counterpart} commit to doing something for the other?");
-    $questions[] = noul('wronged', "In these lines, does {$owner} express feeling wronged by {$counterpart}?");
+    $questions[] = noul('wronged', "Does {$owner} clearly express a genuine personal grievance against {$counterpart}: actual hurt, mistreatment, betrayal or an unmet obligation? "
+        . 'Interpret the meaning of the whole exchange, not isolated negative words. Affectionate insults, consensual pleasure or intensity, mock outrage, competitive combat banter and praise using destructive metaphors are not grievances. '
+        . 'A neutral statement that a debt or balance remains owed is not by itself a grievance; do not infer breach from the mere existence of an obligation. Require expressed hurt or criticism, or clear evidence of a breach, refusal or missed deadline. '
+        . 'A neutral report of partial payment, delivery or other progress, with no expressed hurt or criticism, is not by itself a grievance. '
+        . 'An insult alone with no clear hurt or wrong is insufficient: answer false when intent is ambiguous. '
+        . 'Affectionate words or smiling do not cancel a clearly expressed genuine complaint.');
     return $questions;
 }
 
@@ -85,28 +138,75 @@ function pass2Questions(array $ctx, array $positives): array
     $owner = $ctx['owner'];
     $counterpart = $ctx['counterpart'];
     $labels = array_keys(lineLabels($ctx['lines']));
+    $sourceOptions = array_merge(['unknown'], array_keys(substanceCandidates($ctx['lines'])));
+    $relatedPromiseIds = [];
+    foreach ($ctx['open_issues'] as $issue) {
+        if ($issue['kind'] === 'promise' && in_array($issue['status'], OPEN_STATUSES, true)) {
+            $relatedPromiseIds[] = $issue['id'];
+        }
+    }
+    $relatedOptions = array_merge(['none'], $relatedPromiseIds);
     $questions = [];
     if (in_array('commitment', $positives, true)) {
         $questions[] = choice('commitment.who', 'Who made the commitment?', [$owner, $counterpart]);
         $questions[] = choice('commitment.strength', 'Is it a firm commitment ("I will") or only an attempt ("I will try")?', STRENGTHS);
         $questions[] = choice('commitment.acceptance', 'Did the other person accept the commitment?', ACCEPTANCE_CHOICES);
         $questions[] = choice('commitment.line', 'Which line contains the commitment?', $labels);
+        $questions[] = choice(
+            'commitment.matter',
+            'Which line identifies the specific action that gives this commitment its subject? Prefer the line naming the concrete action, object and stated quantity. A pronoun-only or timing line cannot identify the matter by itself; it may supply a related term such as a deadline, which remains in context. If the promise says "I promise to do that", choose the concrete accepted request it refers to. Choose unknown when no concrete action or object is stated.',
+            $sourceOptions
+        );
+        $questions[] = choice(
+            'commitment.settlement',
+            'Which witnessed line explicitly states an additional condition or alternative that would settle this agreement? The ordinary promised action, including its stated amount or deadline, is the obligation itself, not a separate settlement term. Choose unknown unless a distinct additional condition or alternative is stated as what settles the agreement.',
+            $sourceOptions
+        );
+        if ($relatedPromiseIds !== []) {
+            $questions[] = choice('commitment.related', 'Does this commitment explicitly replace or change the terms of one of these prior promises in a renegotiation? Choose none for a promise that merely continues an existing obligation.', $relatedOptions);
+        }
     }
     if (in_array('wronged', $positives, true)) {
-        $questions[] = choice('grievance.line', "Which line shows {$owner} feeling wronged?", $labels);
-        $questions[] = choice('grievance.wants', "What does {$owner} want from {$counterpart} about it?", WANTS);
+        $questions[] = choice('grievance.line', "Which line spoken by {$owner} clearly expresses the genuine wrong or hurt, rather than affectionate or competitive banter?", $labels);
+        $questions[] = choice('grievance.wants', "What remedy does {$owner} actually want from {$counterpart} for that wrong? Choose unknown if no remedy is clear; insults alone do not imply a demand for an apology.", WANTS);
+        $questions[] = choice(
+            'grievance.matter',
+            "Which line states the specific wrong or unmet obligation that caused this grievance? Prefer {$owner}'s concrete complaint when it names the actual wrong; otherwise prefer the counterpart's concrete act or specific accepted request that identifies it. Choose unknown if the actual subject is not clear.",
+            $sourceOptions
+        );
+        $questions[] = choice(
+            'grievance.nature',
+            'What best describes the nature of this specific grievance?',
+            SUBSTANCE_NATURES
+        );
+        $questions[] = choice(
+            'grievance.settlement',
+            'Which witnessed line explicitly states the concrete remedy requested for this wrong? Choose unknown unless a specific remedy is stated; do not infer one from wants or a generic demand.',
+            $sourceOptions
+        );
+        if ($relatedPromiseIds !== []) {
+            $questions[] = choice('grievance.related', 'Does this grievance explicitly dispute or allege failure of one of these prior promises? Choose none unless the lines clearly identify that promise as the wrong at issue.', $relatedOptions);
+        }
     }
     foreach ($ctx['open_issues'] as $issue) {
         if (!in_array("addresses:{$issue['id']}", $positives, true)) {
             continue;
         }
         $prefix = "issue:{$issue['id']}";
+        $target = issueTarget($issue);
         $isPromise = $issue['kind'] === 'promise';
-        $questions[] = choice("{$prefix}.status", 'After these lines, what is the state of this matter?', $isPromise ? PROMISE_STATUS_CHOICES : GRIEVANCE_STATUS_CHOICES);
-        $questions[] = choice("{$prefix}.trajectory", 'Did these lines make it better, worse, or neither?', TRAJECTORIES);
-        $questions[] = choice("{$prefix}.line", 'Which line matters most for it?', $labels);
+        $questions[] = choice("{$prefix}.status", $target . ' ' . ($isPromise
+            ? 'What is the state of this specific original promise? Fulfilled requires clear evidence the complete agreed action and quantity were completed. Judge fulfillment only against the selected matter and its directly related terms; unrelated obligations elsewhere in the shared exchange do not block it. An explicit acknowledgement of full completion need not repeat terms already established in the original evidence; do not infer a missed deadline from silence when the speaker clearly says the obligation is done. If the selected obligation is explicitly still outstanding, choose no_change unless the lines clearly state failure or refusal; do not use a separate debt as evidence it remains outstanding. If the lines say it was late or only partial, it is not fulfilled. When only partial payment, delivery or progress is acknowledged and the selected obligation remains outstanding, choose no_change; that alone is not fulfillment or proof of failure. An unrelated gift and a generic apology are not fulfillment. Broken requires clear evidence of failure or refusal. Renegotiated requires both people to accept replacement terms for the action, amount or deadline; a one-sided proposal or discussion is no_change. Released requires an explicit release from the obligation. Disputed requires a clear challenge to whether the agreement or its terms apply. Choose no_change if unclear.'
+            : "What is the state of this specific original grievance? Resolved requires clear evidence the actual original wrong was repaired or settled, with all explicit settlement terms completed. {$owner}'s explicit acknowledgement that this specific wrong was repaired or settled is decisive even if an apology also appears; clear direct evidence of actual repair also qualifies. A counterpart's claim alone, affection, banter or a generic apology alone is neither resolved nor let_go. If only part of the restitution or repair is completed and the grievance remains unresolved, choose no_change. Let_go means {$owner} clearly forgives or releases this grievance without repair. Choose no_change if unclear."), $isPromise ? PROMISE_STATUS_CHOICES : GRIEVANCE_STATUS_CHOICES);
+        $questions[] = choice("{$prefix}.trajectory", $target . ' Did these lines make it better, worse, or neither?', TRAJECTORIES);
+        $lineQuestion = $target . ' Which line gives the clearest direct evidence about this specific matter? ';
+        $lineQuestion .= $isPromise
+            ? 'For a renegotiated promise, prefer the line stating concrete replacement terms (action, amount or deadline) over a pronoun-only acceptance; use the whole exchange to establish mutual acceptance. For other outcomes, prefer the owner\'s explicit acknowledgement of the result over the other person\'s claim. '
+            : "Prefer {$owner}'s explicit acknowledgement of the result over the other person's claim. ";
+        $lineQuestion .= 'Among equally direct lines, choose the last one in source order.';
+        $questions[] = choice("{$prefix}.line", $lineQuestion, $labels);
         if (!$isPromise) {
-            $questions[] = choice("{$prefix}.wants", "What does {$owner} now want from {$counterpart} about it?", WANTS);
+            $questions[] = choice("{$prefix}.wants", $target . " What does {$owner} now want from {$counterpart} about it?", WANTS);
         }
     }
     return $questions;

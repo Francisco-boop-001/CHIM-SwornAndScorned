@@ -6,6 +6,8 @@ namespace ChimSwornAndScorned;
 require_once __DIR__ . '/pg.php';
 require_once __DIR__ . '/tables.php';
 require_once __DIR__ . '/ledger.php';
+require_once __DIR__ . '/rows.php';
+require_once __DIR__ . '/witness.php';
 
 // Our own advisory range: serialises our writers only. Cross-plugin safety is the row lock.
 const SAS_ADVISORY_BASE = 1002000000;
@@ -57,6 +59,7 @@ final class PerspectiveStore
             }
             $gamets = (float) ($row['gamets_last_updated'] ?? 0);
             $eventIds = $request['event_ids'];
+            $freshLines = [];
             if ($eventIds !== []) {
                 $freshSettings = [];
                 foreach ($this->pg->all('SELECT key, value::text AS value FROM ' . sasTable('settings') . " WHERE key IN ('enabled','cast') ORDER BY key FOR SHARE") as $setting) {
@@ -74,9 +77,29 @@ final class PerspectiveStore
                     $counterparts = $this->pg->all('SELECT id FROM core_npc_master WHERE lower(npc_name) = lower($1) ORDER BY id LIMIT 2 FOR SHARE', [$counterpartName]);
                     if (count($counterparts) !== 1 || 'npc:' . (int) $counterparts[0]['id'] !== $counterpartKey) return 'counterpart_changed';
                 }
-                $events = $this->pg->all('SELECT rowid, gamets FROM eventlog WHERE rowid = ANY($1::bigint[]) FOR SHARE', [pgIntArray($eventIds)]);
+                $events = $this->pg->all('SELECT rowid, type, data, people, gamets, localts, delivery_state FROM eventlog WHERE rowid = ANY($1::bigint[]) ORDER BY rowid FOR SHARE', [pgIntArray($eventIds)]);
                 if (count($events) !== count($eventIds)) {
                     return 'events_missing';
+                }
+                foreach ($events as $event) {
+                    $line = lineFromEventRow($event, $playthrough['player_name']);
+                    if ($line !== null) $freshLines[$line['event_id']] = $line;
+                }
+                if (isset($request['source_lines'])) {
+                    if (!is_array($request['source_lines']) || !array_is_list($request['source_lines'])
+                        || count($request['source_lines']) !== count($eventIds)) return 'events_missing';
+                    $sourceIds = array_column($request['source_lines'], 'event_id');
+                    $expectedIds = $eventIds;
+                    sort($sourceIds);
+                    sort($expectedIds);
+                    if ($sourceIds !== $expectedIds) return 'events_missing';
+                    foreach ($request['source_lines'] as $line) {
+                        $fresh = $freshLines[$line['event_id']] ?? null;
+                        if ($fresh === null) return 'events_missing';
+                        foreach (['event_id', 'gamets', 'type', 'speaker', 'listener', 'people', 'text'] as $field) {
+                            if (($line[$field] ?? null) !== ($fresh[$field] ?? null)) return 'events_missing';
+                        }
+                    }
                 }
                 $gamets = max($gamets, ...array_map('floatval', array_column($events, 'gamets')));
             }
@@ -87,6 +110,24 @@ final class PerspectiveStore
                 return $result['status'];
             }
 
+            $oldIssues = array_column($ledger['issues'], null, 'id');
+            $witnessed = pairLinesWitnessedBy(array_values($freshLines), $request['owner_name'], (string) ($request['counterpart_name'] ?? ''));
+            foreach ($result['ledger']['issues'] as $issue) {
+                $substance = $issue['substance'] ?? null;
+                $old = $oldIssues[$issue['id']] ?? null;
+                if ($old !== null) {
+                    if (($old['substance'] ?? null) !== $substance) return 'events_missing';
+                    if ($substance !== null && $issue !== $old && $eventIds !== [] && !isset($request['source_lines'])) return 'events_missing';
+                    continue;
+                }
+                if ($substance !== null) {
+                    try {
+                        validateSubstanceForLines($substance, $witnessed);
+                    } catch (\UnexpectedValueException) {
+                        return 'events_missing';
+                    }
+                }
+            }
             $params = [$ownerId, json_encode($result['ledger'], JSON_FLAGS), $gamets];
             $extendedSql = 'extended_data';
             $counterpartName = $request['counterpart_name'] ?? null;

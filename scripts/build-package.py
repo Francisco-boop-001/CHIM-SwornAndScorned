@@ -39,6 +39,7 @@ SERVER_FILES = (
     "questions.php",
     "rows.php",
     "store.php",
+    "substance.php",
     "surfacing.php",
     "tables.php",
     "transitions.php",

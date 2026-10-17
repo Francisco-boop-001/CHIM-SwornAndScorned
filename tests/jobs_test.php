@@ -93,6 +93,8 @@ $promiseAnswers = [
     'commitment.strength' => ['value' => 'will', 'p' => 0.88],
     'commitment.acceptance' => ['value' => 'accepted', 'p' => 0.85],
     'commitment.line' => ['value' => 'L2', 'p' => 0.97],
+    'commitment.matter' => ['value' => 'L2', 'p' => 0.97],
+    'commitment.settlement' => ['value' => 'unknown', 'p' => 0.97],
 ];
 $fallbackAnswers = [
     'commitment' => ['value' => true, 'p' => 0.96],
@@ -101,6 +103,8 @@ $fallbackAnswers = [
     'commitment.strength' => ['value' => 'will', 'p' => 0.96],
     'commitment.acceptance' => ['value' => 'accepted', 'p' => 0.96],
     'commitment.line' => ['value' => 'L2', 'p' => 0.96],
+    'commitment.matter' => ['value' => 'L2', 'p' => 0.96],
+    'commitment.settlement' => ['value' => 'unknown', 'p' => 0.96],
 ];
 $job = [
     'id' => 7, 'playthrough_id' => 'pt-1', 'owner_npc_id' => 5124, 'owner_name' => 'Lydia',
@@ -133,6 +137,7 @@ check($deps->commits[0]['request'] === [
     'event_ids' => [4, 5],
     'counterpart_name' => 'Farkas',
     'counterpart_key' => 'npc:3',
+    'source_lines' => $deps->lines,
 ], 'commit receives the complete stale-validation request');
 check(processJob($job, $deps) === ['outcome' => 'done', 'reason' => 'replay'], 'replay does not duplicate issues');
 

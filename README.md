@@ -6,17 +6,22 @@
 
 ![A broken oath ring lies between two estranged Nords on snowy mead-hall steps; an emo llama watches from the roof.](server/dashboard-art.webp)
 
-**Release: [0.1.7 — PRE-ALPHA](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/tag/sworn_and_scorned-v0.1.7).** This packaging correction passed three package tests and isolated server HTTP import checks. Version 0.1.6 passed synthetic fixtures and browser checks, including a 1,400-NPC save; its runtime logic is unchanged. Earlier versions also exercised real model calls and a simulated game client. **In-game dialogue quality and long-session behaviour remain unverified.** The llama can hold a clipboard; it cannot certify your save.
+**Release: [0.1.9 — PRE-ALPHA](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/tag/sworn_and_scorned-v0.1.9).** Richer records preserve what was actually promised or wronged, who owes whom, and what the conversation establishes would settle it. Both real evaluators passed 38 synthetic cases each on the disposable server, including nine untouched cases per backend. **Actual gameplay, audible delivery and long-session behaviour remain unverified.** The llama can hold a receipt; it cannot audit your inventory.
 
-**New in 0.1.7:** adds MO2 metadata and one clear installation route. The llama has stopped handing you three boxes and a cryptic riddle. [Packaging changes](distribution/sworn_and_scorned-v0.1.7.md) · [Verification and limits](docs/verification/mo2-0.1.7.md).
+**New in 0.1.9:** exact source-backed issue substance and bounded originating context, safer partial repayment and replacement promises, and the tone correction developed for the unpublished 0.1.8 candidate. Affectionate insults and combat banter are judged in context; a favour does not magically become debt. Unknown terms stay unknown, and existing records or historical affinity are not automatically rewritten. [Release notes](distribution/sworn_and_scorned-v0.1.9.md) · [Verification and limits](docs/verification/richer-records-0.1.9.md).
+
+**Since 0.1.7:** the MO2 ZIP includes version/project metadata and one clear installation route. [Packaging verification](docs/verification/mo2-0.1.7.md).
 
 **Since 0.1.6:** removes the eight-NPC cast cap, adds **Select all**, **Clear selection** and a selected count, and shows **Recent activity**. Install the update to change your running server; downloading it alone changes precisely nothing. The llama appreciates the thought.
 
 [0.1.6 changes](distribution/sworn_and_scorned-v0.1.6.md) · [Verification and limits](docs/verification/dashboard-0.1.6.md)
 
+[Earlier tone verification](docs/verification/tone-0.1.8.md). Existing mistaken grievances are not automatically removed.
+
 ## What it actually does
 
 - Records supported grievances and promises from eligible conversation evidence, distinguishing a firm promise from “I will try.”
+- Preserves the specific matter and originating evidence, including stated quantities, deadlines and settlement conditions. Later evidence cannot rewrite the original terms.
 - Tracks what the NPC wants: an explanation, apology, restitution, a kept promise, thanks, or something still unclear.
 - Revisits existing issues when later speech supports fulfilment, dispute, release, resolution, or letting go.
 - Adds at most one short, paced reminder to an eligible speaker's prompt. The dialogue model decides what to do with it.
@@ -28,7 +33,7 @@ It does not set Skyrim relationship ranks, complete quests, transfer items, or g
 
 ## Install with MO2: download one file
 
-**MO2 users only need [sworn_and_scorned-0.1.7-mo2.zip](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.7/sworn_and_scorned-0.1.7-mo2.zip).** Install it like a regular mod. The DWPkg is already inside; you do not download another package, put the DWPkg inside the ZIP, or extract PHP files into Skyrim's Data folder. The llama brought three containers, not three dependencies.
+**MO2 users only need [sworn_and_scorned-0.1.9-mo2.zip](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.9/sworn_and_scorned-0.1.9-mo2.zip).** Install it like a regular mod. The DWPkg is already inside; you do not download another package, put the DWPkg inside the ZIP, or extract PHP files into Skyrim's Data folder. The llama brought three containers, not three dependencies.
 
 1. In MO2, choose **Install a new mod from an archive** and select the **`-mo2.zip`** file.
 2. Keep the ZIP's root as the Data directory: `CHIM` must be directly below it. Do not select the inner `sworn_and_scorned` folder as Data. If MO2 says the content does not look valid, keep this layout and continue; this server-only mod contains no ESP, meshes or textures.
@@ -36,9 +41,9 @@ It does not set Skyrim relationship ranks, complete quests, transfer items, or g
 4. Start your CHIM server, then **launch Skyrim/SKSE through MO2 and load a save**. A compatible CHIM client sends the bundled server package to the connected server. Installing the ZIP in MO2 alone does not perform the server installation.
 5. Open CHIM's web **Plugin Manager → Server Plugins**, refresh **Automatic Game Plugin Sync**, and verify `sworn_and_scorned` shows the version you installed. Then open **Plugin Page** and follow Setup below. The server version is the completion check; MO2's checkbox is not.
 
-For 0.1.7, MO2 should expose `Data/CHIM/server-plugins/sworn_and_scorned/0.1.7.dwpkg`. This is a **CHIM server extension**, with no ESP/ESL or Papyrus companion. Both your client and server must support game-bundled server-plugin synchronization, and the server needs PHP CLI worker execution. The older [verification record](docs/verification/release-0.1.1.md) identifies the tested platform; support across every historical CHIM build is not guaranteed. Actual MO2/game synchronization remains unverified in our test record.
+For 0.1.9, MO2 should expose `Data/CHIM/server-plugins/sworn_and_scorned/0.1.9.dwpkg`. This is a **CHIM server extension**, with no ESP/ESL or Papyrus companion. Both your client and server must support game-bundled server-plugin synchronization, and the server needs PHP CLI worker execution. The older [verification record](docs/verification/release-0.1.1.md) identifies the tested platform; support across every historical CHIM build is not guaranteed. Actual MO2/game synchronization remains unverified in our test record.
 
-The **0.1.7 MO2 ZIP** includes a minimal `meta.ini` for its version, project URL and installed-mod missing-content flag. It does not guarantee that MO2's initial installation-dialog warning disappears, add GitHub update polling, or repair CHIM connection errors. [Verification and limits](docs/verification/mo2-0.1.7.md).
+The **0.1.9 MO2 ZIP** includes a minimal `meta.ini` for its version, project URL and installed-mod missing-content flag. It does not guarantee that MO2's initial installation-dialog warning disappears, add GitHub update polling, or repair CHIM connection errors. [Verification and limits](docs/verification/mo2-0.1.7.md).
 
 ### What are the other files?
 
@@ -46,9 +51,9 @@ These are alternative formats for supported server/admin tooling, **not extra st
 
 | File | Purpose |
 | --- | --- |
-| [Standalone DWPkg](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.7/sworn_and_scorned-0.1.7.dwpkg) | The same server package already inside the MO2 ZIP, for tools that explicitly accept CHIM packages. The inspected Plugin Manager has no manual-upload button; do not look for one. |
-| [sworn_and_scorned.tar.gz](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.7/sworn_and_scorned.tar.gz) | Repository/channel installer format with one wrapper directory. It is not an MO2 download or a DWPkg upload. No official catalog listing has been submitted, and catalog installation remains untested. |
-| [SHA256SUMS.txt](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.7/SHA256SUMS.txt) | Optional download-integrity checks. Nothing to install. |
+| [Standalone DWPkg](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.9/sworn_and_scorned-0.1.9.dwpkg) | The same server package already inside the MO2 ZIP, for tools that explicitly accept CHIM packages. The inspected Plugin Manager has no manual-upload button; do not look for one. |
+| [sworn_and_scorned.tar.gz](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.9/sworn_and_scorned.tar.gz) | Repository/channel installer format with one wrapper directory. It is not an MO2 download or a DWPkg upload. No official catalog listing has been submitted, and catalog installation remains untested. |
+| [SHA256SUMS.txt](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.9/SHA256SUMS.txt) | Optional download-integrity checks. Nothing to install. |
 
 Use **one authoritative installation route**. An old enabled MO2 package can compete with an admin-installed update. Do not stack versions or use multiple routes to repair an unexplained error.
 
@@ -60,9 +65,9 @@ If CHIM says **“Could not read automatic package status”**, that message con
 
 **This release includes encrypted storage for an optional dedicated OpenRouter key.** Reusing CHIM credentials needs no extra key setup. Only dedicated overrides need the private master key described below. Older **0.1.1 packages store saved keys as plaintext**; downloading an update does not change the installed server copy.
 
-This release is **0.1.7 — PRE-ALPHA**. On upgrading from 0.1.2, **reselect and save your cast**: old global NPC IDs are intentionally not carried into another playthrough. Player affinity uses CHIM's canonical `Player` relationship; journal names still use your character's name. **Jev now requires the explicit experimental toggle**, even if you previously saved a plugin key. Existing dedicated keys are retained.
+This release is **0.1.9 — PRE-ALPHA**. On upgrading from 0.1.2, **reselect and save your cast**: old global NPC IDs are intentionally not carried into another playthrough. Player affinity uses CHIM's canonical `Player` relationship; journal names still use your character's name. **Jev now requires the explicit experimental toggle**, even if you previously saved a plugin key. Existing dedicated keys are retained.
 
-[Published release notes](distribution/sworn_and_scorned-v0.1.7.md)
+[Published release notes](distribution/sworn_and_scorned-v0.1.9.md)
 
 ## Setup: nominate your disasters
 

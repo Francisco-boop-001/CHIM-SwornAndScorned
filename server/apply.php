@@ -36,6 +36,8 @@ function applyProposal(array $ledger, array $proposal, array $meta): array
     $skipped = [];
     $changedIds = [];
     $newIds = [];
+    $richNewIds = [];
+    $relatedIssueIds = [];
     $issues = $ledger['issues'];
     $index = [];
     foreach ($issues as $position => $issue) {
@@ -80,7 +82,7 @@ function applyProposal(array $ledger, array $proposal, array $meta): array
                 $transitions[] = $key;
                 $changedIds[$issue['id']] = $to;
             } elseif ($to === 'renegotiated') {
-                // Terms changed; the promise stays pending but any new promise in this batch links to it.
+                // Terms changed; legacy proposals may link this promise when the match is unambiguous.
                 $changedIds[$issue['id']] = $to;
             } else {
                 $skipped[] = 'transition_not_allowed';
@@ -114,6 +116,27 @@ function applyProposal(array $ledger, array $proposal, array $meta): array
         if (!is_string($new['label'] ?? null)) {
             throw new UnexpectedValueException('proposal_label_invalid');
         }
+        $hasSubstance = array_key_exists('substance', $new);
+        $substance = null;
+        $relatedIssueId = null;
+        if ($hasSubstance) {
+            $substanceLines = $new['substance_lines'] ?? null;
+            if (!is_array($substanceLines) || !array_is_list($substanceLines)) {
+                throw new UnexpectedValueException('proposal_substance_lines_invalid');
+            }
+            foreach ($substanceLines as $substanceLine) {
+                validateProposalLine($substanceLine, $eventIds);
+            }
+            $substance = validateSubstanceForLines($new['substance'], $substanceLines);
+            if ($substance === null || $substance['matter'] === null
+                || ($substance['settlement']['mode'] === 'complete_obligation' && $new['kind'] !== 'promise')) {
+                throw new UnexpectedValueException('proposal_substance_invalid');
+            }
+            $relatedIssueId = $new['related_issue_id'] ?? null;
+            if ($relatedIssueId !== null && (!is_string($relatedIssueId) || $relatedIssueId === '')) {
+                throw new UnexpectedValueException('proposal_related_issue_invalid');
+            }
+        }
         if ($new['p'] < $meta['policy']['detect_min']) {
             $skipped[] = 'new_confidence_low';
             continue;
@@ -128,7 +151,7 @@ function applyProposal(array $ledger, array $proposal, array $meta): array
             continue;
         }
         $isPromise = $new['kind'] === 'promise';
-        $issues[] = [
+        $issue = [
             'id' => $id,
             'origin' => 'event',
             'kind' => $new['kind'],
@@ -145,12 +168,45 @@ function applyProposal(array $ledger, array $proposal, array $meta): array
             'dismissed' => false,
             'changed_event_id' => $batchMax,
         ];
+        if ($hasSubstance) {
+            $issue['substance'] = $substance;
+        }
+        $issues[] = $issue;
         $index[$id] = array_key_last($issues);
         $newIds[] = $id;
+        if ($hasSubstance) {
+            $richNewIds[$id] = true;
+            $relatedIssueIds[$id] = $relatedIssueId;
+        }
     }
 
-    // Only infer the specified story link when exactly one originating promise fits.
+    // Rich records link only to their explicitly selected, qualifying predecessor.
     foreach ($newIds as $newId) {
+        if (isset($richNewIds[$newId])) {
+            $relatedId = $relatedIssueIds[$newId];
+            if ($relatedId === null) {
+                continue;
+            }
+            $position = $index[$relatedId] ?? null;
+            $change = $changedIds[$relatedId] ?? null;
+            $newKind = $issues[$index[$newId]]['kind'];
+            if ($position === null || !isset($changedIds[$relatedId])
+                || $issues[$position]['kind'] !== 'promise'
+                || $issues[$position]['counterpart'] !== $meta['counterpart']
+                || ($newKind === 'promise' && $issues[$position]['direction'] !== $issues[$index[$newId]]['direction'])
+                || ($newKind === 'promise' ? $change !== 'renegotiated' : !in_array($change, ['broken', 'disputed'], true))) {
+                throw new UnexpectedValueException('proposal_related_issue_invalid');
+            }
+            $issues[$index[$newId]]['links'][] = $relatedId;
+            $issues[$position]['links'][] = $newId;
+            if ($newKind === 'promise' && transitionAllowed('promise', $issues[$position]['status'], 'released')) {
+                $transitions[] = transitionKey($relatedId, $issues[$position]['status'], 'released');
+                $issues[$position]['status'] = 'released';
+            }
+            continue;
+        }
+
+        // Legacy proposals keep the original unambiguous-link behavior.
         $kind = $issues[$index[$newId]]['kind'];
         $candidates = [];
         foreach ($changedIds as $changedId => $change) {

@@ -73,6 +73,29 @@ function renderNote(array $issue, string $ownerName, string $counterpartName): s
         $issue['direction'] === 'owed_by_me' => "On your mind: you promised {$counterpartName} something.",
         default => "On your mind: {$counterpartName} promised you something.",
     };
+    $substance = $issue['substance'] ?? null;
+    if (is_array($substance['matter'] ?? null)) {
+        $settlement = match ($substance['settlement']['mode']) {
+            'explicit' => clipText($substance['settlement']['source']['text'], 64),
+            'complete_obligation' => 'Complete the stated obligation.',
+            default => 'unknown',
+        };
+        $closing = 'Raise it only if it fits the moment.';
+        $budget = MAX_NOTE_CHARS - mb_strlen("{$head} Matter: \"\" Settlement: {$settlement} {$closing}");
+        $matter = trim(preg_replace('/\s+/u', ' ', $substance['matter']['text']) ?? $substance['matter']['text']);
+        if (mb_strlen($matter) > $budget) {
+            $front = intdiv($budget - 1, 2);
+            $matter = mb_substr($matter, 0, $front) . '…' . mb_substr($matter, -($budget - 1 - $front));
+        }
+        // shortcut: the 240-character reminder can omit context terms; revisit projection if the prompt budget grows.
+        $extra = '';
+        $context = array_filter($substance['context'] ?? [], static fn (array $source): bool => $source['ref'] !== $substance['matter']['ref']);
+        $remaining = $budget - mb_strlen($matter) - mb_strlen(' Context: ');
+        if ($context !== [] && $remaining > 1) {
+            $extra = ' Context: ' . clipText(implode(' ', array_column($context, 'text')), $remaining);
+        }
+        return "{$head} Matter: \"{$matter}\"{$extra} Settlement: {$settlement} {$closing}";
+    }
     $tail = trim(WANTS_PHRASES[$issue['wants']] . ' Raise it only if it fits the moment.');
     if ($issue['evidence'] === []) {
         return clipText("{$head} {$tail}", MAX_NOTE_CHARS);

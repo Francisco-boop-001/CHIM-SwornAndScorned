@@ -35,12 +35,12 @@ $test('weak selected evidence cannot award affinity', static function () use ($c
     check($result['ledger']['issues'][0]['status'] === 'resolved' && $result['affinity_delta'] === 0, 'weak evidence awarded affinity');
 });
 $test('commitment actor must match evidence speaker', static function () use ($ctx): void {
-    $a = ['commitment' => ['value' => true, 'p' => 0.95], 'commitment.who' => ['value' => 'Farkas', 'p' => 0.95], 'commitment.strength' => ['value' => 'will', 'p' => 0.95], 'commitment.acceptance' => ['value' => 'accepted', 'p' => 0.95], 'commitment.line' => ['value' => 'L1', 'p' => 0.95]];
+    $a = ['commitment' => ['value' => true, 'p' => 0.95], 'commitment.who' => ['value' => 'Farkas', 'p' => 0.95], 'commitment.strength' => ['value' => 'will', 'p' => 0.95], 'commitment.acceptance' => ['value' => 'accepted', 'p' => 0.95], 'commitment.line' => ['value' => 'L1', 'p' => 0.95], 'commitment.matter' => ['value' => 'L1', 'p' => 0.95], 'commitment.settlement' => ['value' => 'unknown', 'p' => 0.95]];
     check(evaluatePerspective($ctx, new ScriptedBackend($a), POLICY_DECISION_MODEL)['new_issues'] === [], 'promise attributed to another speaker');
 });
 $test('grievance evidence must be spoken by its owner', static function () use ($ctx): void {
     $ctx['lines'] = [sampleLine(11, 'Farkas', 'I was wronged.')];
-    $a = ['wronged' => ['value' => true, 'p' => 0.95], 'grievance.line' => ['value' => 'L1', 'p' => 0.95]];
+    $a = ['wronged' => ['value' => true, 'p' => 0.95], 'grievance.line' => ['value' => 'L1', 'p' => 0.95], 'grievance.matter' => ['value' => 'L1', 'p' => 0.95], 'grievance.nature' => ['value' => 'harm', 'p' => 0.95], 'grievance.settlement' => ['value' => 'unknown', 'p' => 0.95]];
     check(evaluatePerspective($ctx, new ScriptedBackend($a), POLICY_DECISION_MODEL)['new_issues'] === [], 'grievance attributed to another speaker');
 });
 $test('apply enforces status threshold', static function () use ($ledger, $proposal, $meta): void {

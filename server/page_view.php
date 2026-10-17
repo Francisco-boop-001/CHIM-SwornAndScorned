@@ -30,6 +30,30 @@ function renderIssue(array $issue, int $npcId, string $csrf, bool $director): st
             default => 'Unknown',
         }) . '</p>';
     }
+    $substance = $issue['substance'] ?? null;
+    $matter = $substance['matter'] ?? null;
+    $settlement = $substance['settlement'] ?? null;
+    $details .= '<p>Interpreted nature: ' . h((string) ($substance['nature'] ?? 'unknown')) . '</p>'
+        . '<p>Matter: ' . h((string) ($matter['text'] ?? 'unknown')) . '</p>';
+    if (is_array($matter)) {
+        $details .= '<p>Stated by ' . h($matter['speaker']) . ' · Source: ' . h($matter['ref']) . '</p>';
+    }
+    $settlementText = match ($settlement['mode'] ?? 'unknown') {
+        'explicit' => $settlement['source']['text'],
+        'complete_obligation' => 'Completion of the stated obligation (supported expectation)',
+        default => 'unknown',
+    };
+    $details .= '<p>Settlement: ' . h($settlementText) . '</p>';
+    if (($settlement['mode'] ?? null) === 'explicit') {
+        $details .= '<p>Stated by ' . h($settlement['source']['speaker']) . ' · Source: ' . h($settlement['source']['ref']) . '</p>';
+    }
+    if (!empty($substance['context'])) {
+        $details .= '<p>Originating exchange (supporting evidence; may include other matters):</p><ul class="evidence">';
+        foreach ($substance['context'] as $source) {
+            $details .= '<li>' . h($source['speaker']) . ': <q>' . h($source['text']) . '</q> · Source: ' . h($source['ref']) . '</li>';
+        }
+        $details .= '</ul>';
+    }
     $details .= '<ul class="evidence">';
     foreach ($issue['evidence'] ?? [] as $entry) {
         $details .= '<li><q>' . h((string) ($entry['quote'] ?? '')) . '</q> <span class="meta">'
