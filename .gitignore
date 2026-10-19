@@ -18,6 +18,7 @@
 !/docs/verification/mo2-0.1.7.md
 !/docs/verification/tone-0.1.8.md
 !/docs/verification/richer-records-0.1.9.md
+!/docs/verification/written-evidence-0.1.10.md
 
 # Local credentials, editor files and Python caches.
 .env
@@ -28,3 +29,6 @@ __pycache__/
 *.py[cod]
 .DS_Store
 Thumbs.db
+
+# Private frozen provider runner depends on local evidence/bootstrap files.
+/tests/integration/written_quote_real_model.php

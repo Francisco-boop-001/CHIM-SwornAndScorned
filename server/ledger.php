@@ -9,6 +9,7 @@ require_once __DIR__ . '/vocab.php';
 require_once __DIR__ . '/substance.php';
 
 const MAX_SEEDED = 512;
+const MAX_WRITTEN_SOURCES = 1024;
 
 function emptyLedger(string $playthroughId): array
 {
@@ -54,13 +55,17 @@ function normalizeLedger(mixed $raw, string $playthroughId): array
         throw new UnexpectedValueException('ledger_issues_invalid');
     }
     $seeded = array_key_exists('seeded', $raw) ? requireSeededIds($raw) : [];
-    return [
+    $normalized = [
         'playthrough_id' => $playthroughId,
         'floor_event_id' => $floor,
         'processed' => $processed,
         'issues' => $validated,
         'seeded' => $seeded,
     ];
+    if (array_key_exists('written_sources', $raw)) {
+        $normalized['written_sources'] = validateWrittenSources($raw['written_sources']);
+    }
+    return $normalized;
 }
 
 function validateIssue(mixed $issue): array
@@ -135,7 +140,7 @@ function validateEvidence(mixed $entry): array
     if (mb_strlen($entry['quote']) > MAX_QUOTE_CHARS) {
         throw new UnexpectedValueException('evidence_quote_invalid');
     }
-    return [
+    $normalized = [
         'ref' => $entry['ref'],
         'gamets' => $gamets === null ? null : (float) $gamets,
         'speaker' => $entry['speaker'],
@@ -144,6 +149,12 @@ function validateEvidence(mixed $entry): array
         'p' => $p === null ? null : (float) $p,
         'backend' => $entry['backend'],
     ];
+    if (array_key_exists('written', $entry)) {
+        $w = persistedWrittenSource($entry['written']);
+        if ($w['claimed_sender']['name'] !== $entry['speaker']) throw new UnexpectedValueException('evidence_invalid');
+        $normalized['written'] = $w;
+    }
+    return $normalized;
 }
 
 function requireEnum(array $data, string $key, array $allowed): string
@@ -239,4 +250,69 @@ function clipText(string $text, int $max): string
         return $text;
     }
     return rtrim(mb_substr($text, 0, $max - 1)) . '…';
+}
+
+/** Retained with owner history: never evict stable letter replay identities. */
+function validateWrittenSources(mixed $sources): array
+{
+    if (!is_array($sources) || !array_is_list($sources) || count($sources) > MAX_WRITTEN_SOURCES) {
+        throw new UnexpectedValueException('written_sources_invalid');
+    }
+    $seen = [];
+    $normalized = [];
+    foreach ($sources as $source) {
+        if (!is_array($source) || !hasExactKeys($source, ['event_id','document_id','receipt_id','operation_id','digest','result'])
+            || !is_int($source['event_id']) || $source['event_id'] < 1
+            || !is_string($source['digest']) || preg_match('/\A[a-f0-9]{64}\z/D', $source['digest']) !== 1
+            || !in_array($source['result'], ['evaluated','substance_budget'], true)) {
+            throw new UnexpectedValueException('written_sources_invalid');
+        }
+        foreach (['document_id','receipt_id','operation_id'] as $key) {
+            $id = $source[$key];
+            if (!is_string($id) || preg_match('/\A[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}\z/D', $id) !== 1 || isset($seen[$key][$id])) {
+                throw new UnexpectedValueException('written_sources_invalid');
+            }
+            $seen[$key][$id] = true;
+        }
+        if (isset($seen['event_id'][$source['event_id']])) throw new UnexpectedValueException('written_sources_invalid');
+        $seen['event_id'][$source['event_id']] = true;
+        $normalized[] = ['event_id'=>$source['event_id'],'document_id'=>$source['document_id'],
+            'receipt_id'=>$source['receipt_id'],'operation_id'=>$source['operation_id'],
+            'digest'=>$source['digest'],'result'=>$source['result']];
+    }
+    return $normalized;
+}
+
+function writtenSourceEntry(array $line, ?array $origin = null): array
+{
+    $w = $line['written'];
+    return ['event_id'=>$line['event_id'],'document_id'=>$w['document_id'],'receipt_id'=>$w['receipt']['receipt_id'],
+        'operation_id'=>$w['receipt']['operation_id'],'digest'=>hash('sha256', json_encode([$line['event_id'],$line['gamets'],$line['localts'] ?? null,$w], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
+        'result'=>substanceContext($origin ?? [$line]) === null ? 'substance_budget' : 'evaluated'];
+}
+
+/** new | replay | written_source_changed | written_capacity */
+function writtenSourceState(array $ledger, array $lines): string
+{
+    $entries = array_map(writtenSourceEntry(...), array_values(array_filter($lines, static fn(array $l): bool => isset($l['written']))));
+    if ($entries === []) return 'new';
+    $retained = $ledger['written_sources'] ?? [];
+    $replays = 0;
+    $incoming = [];
+    foreach ($entries as $entry) {
+        foreach (['event_id','document_id','receipt_id','operation_id'] as $key) {
+            if (isset($incoming[$key][$entry[$key]])) return 'written_source_changed';
+            $incoming[$key][$entry[$key]] = true;
+        }
+        foreach ($retained as $old) {
+            if ($old['event_id'] === $entry['event_id'] || $old['document_id'] === $entry['document_id']
+                || $old['receipt_id'] === $entry['receipt_id'] || $old['operation_id'] === $entry['operation_id']) {
+                if (array_diff_key($old, ['result'=>true]) !== array_diff_key($entry, ['result'=>true])) return 'written_source_changed';
+                ++$replays;
+                break;
+            }
+        }
+    }
+    if ($replays > 0) return $replays === count($entries) ? 'replay' : 'written_source_changed';
+    return count($retained) + count($entries) > MAX_WRITTEN_SOURCES ? 'written_capacity' : 'new';
 }

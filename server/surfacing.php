@@ -75,6 +75,7 @@ function renderNote(array $issue, string $ownerName, string $counterpartName): s
     };
     $substance = $issue['substance'] ?? null;
     if (is_array($substance['matter'] ?? null)) {
+        if (isset($substance['matter']['written'])) $head = "On your mind: letter attributed to {$counterpartName}.";
         $settlement = match ($substance['settlement']['mode']) {
             'explicit' => clipText($substance['settlement']['source']['text'], 64),
             'complete_obligation' => 'Complete the stated obligation.',
@@ -103,6 +104,7 @@ function renderNote(array $issue, string $ownerName, string $counterpartName): s
     $evidence = $issue['evidence'][array_key_last($issue['evidence'])];
     $who = match (true) {
         $issue['origin'] === 'lore' => 'Old grudge',
+        isset($evidence['written']) => 'Letter attributed to ' . clipText($evidence['speaker'], 40),
         $evidence['speaker'] === $ownerName => 'You said',
         default => clipText($evidence['speaker'], 40) . ' said',
     };

@@ -36,7 +36,7 @@ function renderIssue(array $issue, int $npcId, string $csrf, bool $director): st
     $details .= '<p>Interpreted nature: ' . h((string) ($substance['nature'] ?? 'unknown')) . '</p>'
         . '<p>Matter: ' . h((string) ($matter['text'] ?? 'unknown')) . '</p>';
     if (is_array($matter)) {
-        $details .= '<p>Stated by ' . h($matter['speaker']) . ' · Source: ' . h($matter['ref']) . '</p>';
+        $details .= '<p>' . (isset($matter['written']) ? 'Claimed sender ' : 'Stated by ') . h($matter['speaker']) . ' · Source: ' . h($matter['ref']) . '</p>';
     }
     $settlementText = match ($settlement['mode'] ?? 'unknown') {
         'explicit' => $settlement['source']['text'],
@@ -45,17 +45,18 @@ function renderIssue(array $issue, int $npcId, string $csrf, bool $director): st
     };
     $details .= '<p>Settlement: ' . h($settlementText) . '</p>';
     if (($settlement['mode'] ?? null) === 'explicit') {
-        $details .= '<p>Stated by ' . h($settlement['source']['speaker']) . ' · Source: ' . h($settlement['source']['ref']) . '</p>';
+        $details .= '<p>' . (isset($settlement['source']['written']) ? 'Claimed sender ' : 'Stated by ') . h($settlement['source']['speaker']) . ' · Source: ' . h($settlement['source']['ref']) . '</p>';
     }
     if (!empty($substance['context'])) {
         $details .= '<p>Originating exchange (supporting evidence; may include other matters):</p><ul class="evidence">';
         foreach ($substance['context'] as $source) {
-            $details .= '<li>' . h($source['speaker']) . ': <q>' . h($source['text']) . '</q> · Source: ' . h($source['ref']) . '</li>';
+            $details .= '<li>' . (isset($source['written']) ? 'Claimed sender ' : '') . h($source['speaker']) . ': <q>' . h($source['text']) . '</q> · Source: ' . h($source['ref']) . '</li>';
         }
         $details .= '</ul>';
     }
     $details .= '<ul class="evidence">';
     foreach ($issue['evidence'] ?? [] as $entry) {
+        if (isset($entry['written'])) $details .= renderWrittenSource($entry['written']);
         $details .= '<li><q>' . h((string) ($entry['quote'] ?? '')) . '</q> <span class="meta">'
             . h(implode(' · ', array_map('strval', [$entry['speaker'] ?? '', $entry['label'] ?? '', $entry['backend'] ?? ''])))
             . ' · Source: ' . h((string) ($entry['ref'] ?? 'unknown'));
@@ -191,4 +192,15 @@ function renderPage(array $model, string $csrf, ?string $notice, ?string $global
         $out .= '</ul>';
     }
     return $out . '</section></main></body></html>';
+}
+
+function renderWrittenSource(array $source): string
+{
+    $attachments = [];
+    foreach ($source['attachments'] as $item) $attachments[] = $item['quantity'].' '.$item['form_id'];
+    return '<li>Letter · Claimed sender '.h($source['claimed_sender']['name']).' · Recipient '.h($source['recipient']['name'])
+        .' · Exposure '.h($source['receipt']['exposure']).' · Document '.h($source['document_id'])
+        .' · Receipt '.h($source['receipt']['receipt_id']).' · Operation '.h($source['receipt']['operation_id'])
+        .' · Confirmed received: '.h($attachments === [] ? 'none' : implode(', ',$attachments))
+        .'. Authorship, payer and body claims are not independently confirmed.</li>';
 }

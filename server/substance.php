@@ -5,6 +5,8 @@ namespace ChimSwornAndScorned;
 
 use UnexpectedValueException;
 
+require_once __DIR__ . '/written_evidence.php';
+
 const SUBSTANCE_NATURES = ['obligation', 'insult', 'theft', 'betrayal', 'broken_agreement', 'harm', 'unknown'];
 const SUBSTANCE_SETTLEMENT_MODES = ['explicit', 'complete_obligation', 'unknown'];
 
@@ -20,11 +22,7 @@ function substanceCandidates(array $lines): array
             || !is_string($line['text'] ?? null) || $line['text'] === '' || mb_strlen($line['text']) > 640) {
             continue;
         }
-        $candidates['L' . ($position + 1)] = [
-            'ref' => 'e:' . $line['event_id'],
-            'speaker' => $line['speaker'],
-            'text' => $line['text'],
-        ];
+        $candidates['L' . ($position + 1)] = capsuleFromLine($line);
     }
     return $candidates;
 }
@@ -48,7 +46,7 @@ function substanceContext(array $lines): ?array
             return null;
         }
         $refs[$ref] = true;
-        $context[] = ['ref' => $ref, 'speaker' => $line['speaker'], 'text' => $line['text']];
+        $context[] = capsuleFromLine($line);
     }
     return $context;
 }
@@ -125,7 +123,7 @@ function validateSubstanceForLines(mixed $substance, array $lines): ?array
             throw new UnexpectedValueException('substance_lines_invalid');
         }
         $ref = 'e:' . $line['event_id'];
-        $entry = ['speaker' => $line['speaker'], 'text' => $line['text']];
+        $entry = capsuleFromLine($line);
         if (isset($byRef[$ref]) && $byRef[$ref] !== $entry) {
             throw new UnexpectedValueException('substance_lines_invalid');
         }
@@ -136,7 +134,7 @@ function validateSubstanceForLines(mixed $substance, array $lines): ?array
             continue;
         }
         $line = $byRef[$capsule['ref']] ?? null;
-        if ($line === null || $line['speaker'] !== $capsule['speaker'] || $line['text'] !== $capsule['text']) {
+        if ($line === null || $line !== $capsule) {
             throw new UnexpectedValueException('substance_source_invalid');
         }
     }
@@ -151,16 +149,38 @@ function validateSubstanceForLines(mixed $substance, array $lines): ?array
 
 function validateSubstanceCapsule(mixed $capsule): array
 {
-    if (!is_array($capsule) || !hasExactKeys($capsule, ['ref', 'speaker', 'text'])
+    if (!is_array($capsule) || !hasExactKeys($capsule, array_key_exists('written', $capsule) ? ['ref', 'speaker', 'text', 'written'] : ['ref', 'speaker', 'text'])
         || !is_string($capsule['ref']) || preg_match('/\Ae:[1-9][0-9]*\z/D', $capsule['ref']) !== 1
         || !is_string($capsule['speaker']) || $capsule['speaker'] === '' || mb_strlen($capsule['speaker']) > 128
         || !is_string($capsule['text']) || $capsule['text'] === '' || mb_strlen($capsule['text']) > 640) {
         throw new UnexpectedValueException('issue_substance_capsule_invalid');
     }
-    return ['ref' => $capsule['ref'], 'speaker' => $capsule['speaker'], 'text' => $capsule['text']];
+    $normalized = ['ref' => $capsule['ref'], 'speaker' => $capsule['speaker'], 'text' => $capsule['text']];
+    if (array_key_exists('written', $capsule)) {
+        $w = persistedWrittenSource($capsule['written']);
+        if ($w['body'] !== $capsule['text'] || $w['claimed_sender']['name'] !== $capsule['speaker']) throw new UnexpectedValueException('issue_substance_capsule_invalid');
+        $normalized['written'] = $w;
+    }
+    return $normalized;
 }
 
 function hasExactKeys(array $value, array $keys): bool
 {
     return count($value) === count($keys) && array_diff($keys, array_keys($value)) === [];
+}
+
+function capsuleFromLine(array $line): array
+{
+    $capsule = ['ref'=>'e:'.$line['event_id'],'speaker'=>$line['speaker'],'text'=>$line['text']];
+    if (isset($line['written'])) $capsule['written'] = persistedWrittenSource($line['written']);
+    return $capsule;
+}
+
+function persistedWrittenSource(mixed $w): array
+{
+    if (!is_array($w)) throw new UnexpectedValueException('written_source_invalid');
+    $pt = ['id'=>$w['playthrough_id'] ?? null,'player_name'=>($w['claimed_sender']['kind'] ?? null) === 'player' ? ($w['claimed_sender']['name'] ?? '') : 'Player'];
+    $valid = validateWrittenEnvelope($w, $pt);
+    if ($valid === null) throw new UnexpectedValueException('written_source_invalid');
+    return $valid;
 }

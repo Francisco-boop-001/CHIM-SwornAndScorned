@@ -33,7 +33,7 @@ function evaluatePerspective(array $ctx, DecisionBackend $backend, array $policy
     }
     $positives = [];
     foreach ($pass1 as $question) {
-        if (confident($answers1, $question['id'], $detect) === true) {
+        if ($question['id'] !== 'written.attribution' && confident($answers1, $question['id'], $detect) === true) {
             $positives[] = $question['id'];
         }
     }
@@ -41,6 +41,11 @@ function evaluatePerspective(array $ctx, DecisionBackend $backend, array $policy
         return $proposal;
     }
 
+    $writtenAttribution = confident($answers1, 'written.attribution', $detect) === true;
+    $ownerSpoke = false;
+    foreach ($ctx['lines'] as $sourceLine) {
+        if (!isset($sourceLine['written']) && $sourceLine['speaker'] === $ctx['owner']) $ownerSpoke = true;
+    }
     $pass2 = pass2Questions($ctx, $positives);
     $answers2 = validatedAnswers($pass2, $backend->ask($state, $pass2));
     $lines = lineLabels($ctx['lines']);
@@ -63,7 +68,8 @@ function evaluatePerspective(array $ctx, DecisionBackend $backend, array $policy
         $line = $lineFor('commitment.line');
         $matter = $sourceFor('commitment.matter');
         $settlement = $sourceFor('commitment.settlement');
-        if (is_string($who) && is_string($strength) && $acceptance === 'accepted' && $line !== null && $line['speaker'] === $who && $matter !== null && $substanceContext !== null) {
+        if (is_string($who) && is_string($strength) && $acceptance === 'accepted' && $line !== null && $line['speaker'] === $who && $matter !== null && $substanceContext !== null
+            && (!isset($line['written']) || ($writtenAttribution && $ownerSpoke))) {
             $mine = $who === $ctx['owner'];
             $proposal['new_issues'][] = [
                 'kind' => 'promise',
@@ -95,7 +101,12 @@ function evaluatePerspective(array $ctx, DecisionBackend $backend, array $policy
         $matter = $sourceFor('grievance.matter');
         $nature = confident($answers2, 'grievance.nature', $detect);
         $settlement = $sourceFor('grievance.settlement');
-        if ($line !== null && $line['speaker'] === $ctx['owner'] && $matter !== null && $substanceContext !== null) {
+        $writtenWrong = $line !== null && isset($line['written']) && $writtenAttribution && $line['listener'] === $ctx['owner'];
+        if ($line !== null && ($line['speaker'] === $ctx['owner'] || $writtenWrong) && $matter !== null && $substanceContext !== null) {
+            if ($writtenWrong) {
+                $wants = 'unknown';
+                if ($settlement !== null && isset($settlement['written'])) $settlement = null;
+            }
             $proposal['new_issues'][] = [
                 'kind' => 'grievance',
                 'direction' => null,
@@ -165,6 +176,16 @@ function evaluatePerspective(array $ctx, DecisionBackend $backend, array $policy
                 $replacement['p']
             );
         }
+        if (isset($line['written'])) {
+            if (!$writtenAttribution) continue;
+            $claimedStatus = $status['value'] ?? null;
+            // A signature and received gift do not prove payment by the debtor or recipient forgiveness.
+            if (in_array($claimedStatus, ['fulfilled','resolved','let_go'], true)
+                || ($claimedStatus === 'released' && ($issue['kind'] !== 'promise' || $issue['direction'] !== 'owed_by_me'))
+                || ($claimedStatus === 'renegotiated' && !$ownerSpoke)) {
+                continue;
+            }
+        }
         $wants = $issue['kind'] === 'grievance' ? confident($answers2, "{$prefix}.wants", $detect) : null;
         $trajectory = confident($answers2, "{$prefix}.trajectory", $detect);
         $proposal['updates'][] = [
@@ -172,7 +193,7 @@ function evaluatePerspective(array $ctx, DecisionBackend $backend, array $policy
             'status' => ($status !== null && $statusP >= $policy['status_min']) ? $status['value'] : null,
             'status_p' => $statusP,
             'trajectory' => is_string($trajectory) ? $trajectory : null,
-            'wants' => is_string($wants) ? $wants : null,
+            'wants' => !isset($line['written']) && is_string($wants) ? $wants : null,
             'line' => $line,
         ];
     }

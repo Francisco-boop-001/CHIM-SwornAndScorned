@@ -17,6 +17,10 @@ const SENTINEL_LISTENER = 'explicit_disable_rechat';
 function pairLinesWitnessedBy(array $lines, string $owner, string $counterpart): array
 {
     $kept = array_values(array_filter($lines, static function (array $line) use ($owner, $counterpart): bool {
+        if (($line['type'] ?? null) === 'written_evidence') {
+            return isset($line['written']) && $line['listener'] === $owner && $line['speaker'] === $counterpart
+                && $line['written']['recipient']['name'] === $owner;
+        }
         if (!in_array($line['type'], SPEECH_EVENT_TYPES, true) || $line['listener'] === SENTINEL_LISTENER) {
             return false;
         }

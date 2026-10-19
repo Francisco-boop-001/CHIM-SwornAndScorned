@@ -7,6 +7,7 @@ require_once __DIR__ . '/pg.php';
 require_once __DIR__ . '/tables.php';
 require_once __DIR__ . '/ledger.php';
 require_once __DIR__ . '/rows.php';
+require_once __DIR__ . '/written_source.php';
 require_once __DIR__ . '/witness.php';
 
 // Our own advisory range: serialises our writers only. Cross-plugin safety is the row lock.
@@ -77,12 +78,16 @@ final class PerspectiveStore
                     $counterparts = $this->pg->all('SELECT id FROM core_npc_master WHERE lower(npc_name) = lower($1) ORDER BY id LIMIT 2 FOR SHARE', [$counterpartName]);
                     if (count($counterparts) !== 1 || 'npc:' . (int) $counterparts[0]['id'] !== $counterpartKey) return 'counterpart_changed';
                 }
-                $events = $this->pg->all('SELECT rowid, type, data, people, gamets, localts, delivery_state FROM eventlog WHERE rowid = ANY($1::bigint[]) ORDER BY rowid FOR SHARE', [pgIntArray($eventIds)]);
+                $events = $this->pg->all('SELECT rowid, type, sess, data, people, gamets, localts, delivery_state FROM eventlog WHERE rowid = ANY($1::bigint[]) ORDER BY rowid FOR SHARE', [pgIntArray($eventIds)]);
                 if (count($events) !== count($eventIds)) {
                     return 'events_missing';
                 }
                 foreach ($events as $event) {
-                    $line = lineFromEventRow($event, $playthrough['player_name']);
+                    $line = evidenceLineFromEventRow($this->pg, $event, $playthrough, true);
+                    if ($event['type'] === 'written_evidence' || ($event['type'] === 'info' && $line === null)) return 'events_missing';
+                    if (isset($line['written']) && (!isset($request['source_lines'])
+                        || $line['written']['recipient']['id'] !== $ownerId || $line['listener'] !== $request['owner_name']
+                        || writtenActorKey($line['written']['claimed_sender']) !== $counterpartKey)) return 'events_missing';
                     if ($line !== null) $freshLines[$line['event_id']] = $line;
                 }
                 if (isset($request['source_lines'])) {
@@ -96,7 +101,8 @@ final class PerspectiveStore
                     foreach ($request['source_lines'] as $line) {
                         $fresh = $freshLines[$line['event_id']] ?? null;
                         if ($fresh === null) return 'events_missing';
-                        foreach (['event_id', 'gamets', 'type', 'speaker', 'listener', 'people', 'text'] as $field) {
+                        if (isset($fresh['written']) && ($line['localts'] ?? null) !== $fresh['localts']) return 'events_missing';
+                        foreach (['event_id', 'gamets', 'type', 'speaker', 'listener', 'people', 'text', 'written'] as $field) {
                             if (($line[$field] ?? null) !== ($fresh[$field] ?? null)) return 'events_missing';
                         }
                     }
@@ -110,6 +116,13 @@ final class PerspectiveStore
                 return $result['status'];
             }
 
+            $writtenLines = array_values(array_filter($freshLines, static fn(array $line): bool => isset($line['written'])));
+            $oldWritten = $ledger['written_sources'] ?? [];
+            $newWritten = $result['ledger']['written_sources'] ?? [];
+            if (array_slice($newWritten, 0, count($oldWritten)) !== $oldWritten) return 'events_missing';
+            foreach ($writtenLines as $line) {
+                if (!in_array(writtenSourceEntry($line, array_values($freshLines)), $newWritten, true)) return 'events_missing';
+            }
             $oldIssues = array_column($ledger['issues'], null, 'id');
             $witnessed = pairLinesWitnessedBy(array_values($freshLines), $request['owner_name'], (string) ($request['counterpart_name'] ?? ''));
             foreach ($result['ledger']['issues'] as $issue) {

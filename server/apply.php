@@ -27,7 +27,12 @@ function applyProposal(array $ledger, array $proposal, array $meta): array
         }
     }
     requireCounterpart($meta['counterpart'] ?? null);
-    if (isReplay($ledger, $eventIds)) {
+    $sourceLines = $meta['source_lines'] ?? [];
+    $writtenState = writtenSourceState($ledger, $sourceLines);
+    if (in_array($writtenState, ['written_source_changed', 'written_capacity'], true)) {
+        return ['status'=>$writtenState,'ledger'=>$ledger,'affinity_delta'=>0,'transitions'=>[],'skipped'=>[]];
+    }
+    if ($writtenState === 'replay' || isReplay($ledger, $eventIds)) {
         return ['status' => 'replay', 'ledger' => $ledger, 'affinity_delta' => 0, 'transitions' => [], 'skipped' => []];
     }
     $batchMax = max($eventIds);
@@ -223,13 +228,16 @@ function applyProposal(array $ledger, array $proposal, array $meta): array
     }
 
     $ledger['issues'] = enforceClosedCap($issues);
+    foreach ($sourceLines as $sourceLine) {
+        if (isset($sourceLine['written'])) $ledger['written_sources'][] = writtenSourceEntry($sourceLine, $sourceLines);
+    }
     $ledger = markProcessed($ledger, $eventIds);
     return ['status' => 'applied', 'ledger' => $ledger, 'affinity_delta' => $delta, 'transitions' => $transitions, 'skipped' => $skipped];
 }
 
 function evidenceFromLine(array $line, string $label, float $p, string $backend): array
 {
-    return [
+    $evidence = [
         'ref' => 'e:' . $line['event_id'],
         'gamets' => (float) $line['gamets'],
         'speaker' => $line['speaker'],
@@ -238,6 +246,8 @@ function evidenceFromLine(array $line, string $label, float $p, string $backend)
         'p' => $p,
         'backend' => $backend,
     ];
+    if (isset($line['written'])) $evidence['written'] = persistedWrittenSource($line['written']);
+    return $evidence;
 }
 
 function validateProbability(mixed $p): void

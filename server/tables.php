@@ -180,12 +180,12 @@ function castForPlaythrough(mixed $stored, ?string $playthroughId): array
 }
 
 /** Shared launch/tick eligibility: an intentional pause must not consume work. */
-function workerPauseReason(#[\SensitiveParameter] array $settings): ?string
+function workerPauseReason(#[\SensitiveParameter] array $settings, bool $checkCredentials = true): ?string
 {
     if (empty($settings['enabled'])) return 'disabled';
-    if (!empty($settings['use_jev']) && !empty($settings['_key_error'])) return 'key_storage_unavailable';
+    if ($checkCredentials && !empty($settings['use_jev']) && !empty($settings['_key_error'])) return 'key_storage_unavailable';
     if (filter_var($GLOBALS['NEVER_CLEAR_RELATIONSHIP_DATA'] ?? false, FILTER_VALIDATE_BOOLEAN)) return 'restore_policy';
-    if (!empty($settings['use_jev']) && decisionApiKey($settings) === null) return 'jev_credentials_unavailable';
+    if ($checkCredentials && !empty($settings['use_jev']) && decisionApiKey($settings) === null) return 'jev_credentials_unavailable';
     return null;
 }
 

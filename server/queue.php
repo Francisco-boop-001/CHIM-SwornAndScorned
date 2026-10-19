@@ -5,6 +5,7 @@ namespace ChimSwornAndScorned;
 
 require_once __DIR__ . '/tables.php';
 require_once __DIR__ . '/rows.php';
+require_once __DIR__ . '/written_source.php';
 require_once __DIR__ . '/batches.php';
 require_once __DIR__ . '/jobs.php';
 require_once __DIR__ . '/store.php';
@@ -19,17 +20,18 @@ const SCAN_LIMIT = 500;
 const LEASE_SECONDS = 120;
 
 /** Read new speech rows, emit settled per-perspective jobs, advance the cursor. Returns jobs created. */
-function scanOnce(Pg $pg, array $playthrough, #[\SensitiveParameter] array $settings, int $now): int
+function scanOnce(Pg $pg, array $playthrough, #[\SensitiveParameter] array $settings, int $now, bool $checkCredentials = true): int
 {
-    if (workerPauseReason($settings) !== null) return 0;
+    if (workerPauseReason($settings, $checkCredentials) !== null) return 0;
     if (array_key_exists('_cast_playthrough', $settings) && $settings['_cast_playthrough'] !== $playthrough['id']) return 0;
     $pt = $playthrough['id'];
     $cursorTable = sasTable('cursor');
-    $cursorRow = $pg->one("SELECT last_rowid FROM {$cursorTable} WHERE playthrough_id = $1", [$pt]);
+    $cursorRow = $pg->one("SELECT last_rowid FROM {$cursorTable} WHERE playthrough_id = $1 FOR UPDATE", [$pt]);
     if ($cursorRow === null) {
         $max = $pg->one('SELECT COALESCE(max(rowid), 0) AS m FROM eventlog');
-        $pg->exec("INSERT INTO {$cursorTable} (playthrough_id, last_rowid) VALUES ($1, $2) ON CONFLICT (playthrough_id) DO NOTHING", [$pt, (int) $max['m']]);
-        return 0;
+        $pg->exec("INSERT INTO {$cursorTable} (playthrough_id, last_rowid) VALUES ($1, $2) ON CONFLICT (playthrough_id) DO NOTHING", [$pt, initialEvidenceCursor($pg, $playthrough, $settings, (int) $max['m'])]);
+        $cursorRow = $pg->one("SELECT last_rowid FROM {$cursorTable} WHERE playthrough_id = $1 FOR UPDATE", [$pt]);
+        if ($cursorRow === null) return 0;
     }
     if ($settings['cast'] === []) {
         return 0;
@@ -39,8 +41,9 @@ function scanOnce(Pg $pg, array $playthrough, #[\SensitiveParameter] array $sett
         $castIds[$row['npc_name']] = (int) $row['id'];
     }
     $rows = $pg->all(
-        "SELECT rowid, type, data, people, gamets, localts, delivery_state FROM eventlog
-         WHERE rowid > $1 AND type IN ('chat', 'inputtext', 'inputtext_s', 'ginputtext', 'ginputtext_s')
+        "SELECT rowid, type, sess, data, people, gamets, localts, delivery_state FROM eventlog
+         WHERE rowid > $1 AND (type IN ('chat', 'inputtext', 'inputtext_s', 'ginputtext', 'ginputtext_s')
+           OR (type='info' AND sess='written_evidence_v1'))
          ORDER BY rowid LIMIT " . SCAN_LIMIT,
         [(int) $cursorRow['last_rowid']]
     );
@@ -50,7 +53,7 @@ function scanOnce(Pg $pg, array $playthrough, #[\SensitiveParameter] array $sett
     }
     $lines = [];
     foreach ($window['rows'] as $row) {
-        $line = lineFromEventRow($row, $playthrough['player_name']);
+        $line = evidenceLineFromEventRow($pg, $row, $playthrough);
         if ($line !== null) {
             $lines[] = $line;
         }
@@ -155,12 +158,12 @@ final class PgJobDeps implements JobDeps
     public function linesFor(array $eventIds): array
     {
         $rows = $this->pg->all(
-            'SELECT rowid, type, data, people, gamets, localts, delivery_state FROM eventlog WHERE rowid = ANY($1::bigint[]) ORDER BY rowid',
+            'SELECT rowid, type, sess, data, people, gamets, localts, delivery_state FROM eventlog WHERE rowid = ANY($1::bigint[]) ORDER BY rowid',
             [pgIntArray($eventIds)]
         );
         $lines = [];
         foreach ($rows as $row) {
-            $line = lineFromEventRow($row, $this->playthrough['player_name']);
+            $line = evidenceLineFromEventRow($this->pg, $row, $this->playthrough);
             if ($line !== null) {
                 $lines[] = $line;
             }

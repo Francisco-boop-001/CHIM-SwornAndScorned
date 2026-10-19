@@ -35,6 +35,11 @@ function scanWindow(array $rows, int $now): array
  */
 function perspectivesOf(array $line, array $castIds): array
 {
+    if (($line['type'] ?? null) === 'written_evidence') {
+        $w = $line['written'] ?? null;
+        return is_array($w) && ($castIds[$w['recipient']['name']] ?? null) === $w['recipient']['id']
+            ? [[$w['recipient']['name'], $w['claimed_sender']['name']]] : [];
+    }
     $speaker = $line['speaker'];
     $listener = $line['listener'];
     if ($listener === SENTINEL_LISTENER) {

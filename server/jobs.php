@@ -81,10 +81,32 @@ function processJob(array $job, JobDeps $deps): array
         return $result('stale', 'counterpart_unresolved');
     }
     $ledger = $deps->ledgerFor($ownerId, $playthroughId);
-    if (isReplay($ledger, $eventIds)) {
+    $writtenLines = array_values(array_filter($lines, static fn(array $line): bool => isset($line['written'])));
+    foreach ($writtenLines as $line) {
+        $w = $line['written'];
+        if ($w['playthrough_id'] !== $playthroughId || $w['recipient']['id'] !== $ownerId
+            || $w['recipient']['name'] !== $ownerName || writtenActorKey($w['claimed_sender']) !== $counterpart) {
+            return $result('stale', 'written_source_invalid');
+        }
+    }
+    $writtenState = writtenSourceState($ledger, $writtenLines);
+    if ($writtenState === 'written_source_changed') return $result('stale', $writtenState);
+    if ($writtenState === 'written_capacity') {
+        $lines = array_values(array_filter($lines, static fn(array $line): bool => !isset($line['written'])));
+        if ($lines === []) return $result('stale', 'written_capacity');
+        $eventIds = array_column($lines, 'event_id');
+        $writtenLines = [];
+    }
+    if ($writtenLines === [] && isReplay($ledger, $eventIds)) {
         return $result('done', 'replay');
     }
 
+    if ($writtenLines !== [] && $writtenState === 'replay') {
+        $status = $deps->commitLedger(['owner_npc_id'=>$ownerId,'owner_name'=>$ownerName,'playthrough_id'=>$playthroughId,
+            'event_ids'=>$eventIds,'counterpart_name'=>$counterpartName,'counterpart_key'=>$counterpart,'source_lines'=>$lines],
+            static fn(array $fresh): array => ['status'=>writtenSourceState($fresh, $writtenLines) === 'replay' ? 'replay' : 'written_source_changed']);
+        return $result($status === 'replay' ? 'done' : 'stale', $status);
+    }
     $backendKind = $job['backend'] ?? 'decisions';
     if (!in_array($backendKind, ['decisions', 'llm'], true)) {
         return $result('failed', 'backend_unavailable');
@@ -135,12 +157,13 @@ function processJob(array $job, JobDeps $deps): array
         'backend' => $backend->name(),
         'policy' => $policy,
     ];
+    if ($writtenLines !== []) $meta['source_lines'] = $lines;
     $status = $deps->commitLedger($request, static fn (array $fresh): array => applyProposal($fresh, $proposal, $meta));
     return match ($status) {
         'committed', 'replay', 'unchanged' => $result('done', $status),
         'restore_policy' => $result('paused', 'restore_policy'),
         'busy' => $result('retry', 'owner_busy'),
-        'owner_changed', 'playthrough_changed', 'events_missing', 'edge_invalid', 'counterpart_changed', 'disabled', 'cast_changed' => $result('stale', $status),
+        'owner_changed', 'playthrough_changed', 'events_missing', 'edge_invalid', 'counterpart_changed', 'disabled', 'cast_changed', 'written_source_changed', 'written_capacity', 'written_source_invalid' => $result('stale', $status),
         default => $result('stale', 'commit_rejected'),
     };
 }
