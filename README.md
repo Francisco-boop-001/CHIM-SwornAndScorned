@@ -8,11 +8,17 @@
 
 **Release: [0.1.11 — PRE-ALPHA](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/tag/sworn_and_scorned-v0.1.11).** The llama now lets CHIM change playthroughs without clinging to the old one, and repeated disputes stop turning a genuine new grievance into a retry festival.
 
+**The new Skyrim interface is optional. The existing web Plugin Page still works.** Keep your current CHIM interface if you prefer: normal conversation tracking, promises, grievances, reminders and the Jev toggle do not require the new in-game menu. Settings, the journal, Director view and recent activity remain available through CHIM's web **Plugin Page**.
+
+Apparently I can add a feature without making everybody install another menu. Nobody is more surprised than I am.
+
 **New in 0.1.11:** cooperative worker pause at playthrough changes, safe repeated-dispute handling, a bounded server-only written-work entry point, supported foreground relationship-LLM execution in that bounded mode, and full written evidence up to 2,000 Unicode characters. Speech stays at 640 characters per source line; originating context stays bounded. Written-source diagnostics distinguish committed evaluation, replay and abstention without printing the letter, prompt or key. [Release notes](distribution/sworn_and_scorned-v0.1.11.md) · [Verification and limits](docs/verification/fixes-0.1.11.md) · [Server API](docs/written-evidence-v1.md).
 
 **Since 0.1.10:** compatible producers can submit recipient-only written evidence with exact provenance/history and replay safeguards. Current words and explicit present endorsements are assessed separately from enclosed old quotations; forwarding an IOU is not debt necromancy. Unsupported written settlement claims cannot quietly mark an issue as improving or refresh it. The earlier [0.1.10 verification](docs/verification/written-evidence-0.1.10.md) records the real-provider quote tests and their limits.
 
-This interface needs a compatible producer and does not itself send letters, create spontaneous offscreen NPC correspondence, transfer gifts/items, or implement forgery discovery. Existing spoken-conversation features remain available without a written-evidence producer. **Gameplay, physical delivery, audible dialogue and long-session behaviour remain unverified.** The llama still cannot audit your inventory.
+Skyrim has one courier, and he is alarmingly good at finding you. Naturally, I looked at that logistical miracle and thought, “This man needs more paperwork.” I may be the problem.
+
+**Letter tracking is an optional integration.** It needs a compatible written-evidence producer. S&S does not send letters, create spontaneous offscreen NPC correspondence, transfer gifts/items or implement forgery discovery. Ordinary spoken-conversation features work without a letter producer or the new Skyrim interface. **Gameplay, physical delivery, audible dialogue and long-session behaviour remain unverified.** The llama still cannot audit your inventory.
 
 **Since 0.1.9:** richer records preserve the particular wrong or accepted obligation, who owes whom, and established settlement conditions. Unknown terms stay unknown; partial repayment does not settle the entire obligation, and a favour does not magically become debt. The contextual tone correction distinguishes affectionate insults and combat banter from genuine hurt. Existing records and historical affinity are not automatically rewritten. The [0.1.9 verification](docs/verification/richer-records-0.1.9.md) covered 38 synthetic cases per real backend, including nine untouched cases each.
 
@@ -47,7 +53,7 @@ It does not set Skyrim relationship ranks, complete quests, transfer items, or g
 4. Start your CHIM server, then **launch Skyrim/SKSE through MO2 and load a save**. A compatible CHIM client sends the bundled server package to the connected server. Installing the ZIP in MO2 alone does not perform the server installation.
 5. Open CHIM's web **Plugin Manager → Server Plugins**, refresh **Automatic Game Plugin Sync**, and verify `sworn_and_scorned` shows the version you installed. Then open **Plugin Page** and follow Setup below. The server version is the completion check; MO2's checkbox is not.
 
-For 0.1.11, MO2 should expose `Data/CHIM/server-plugins/sworn_and_scorned/0.1.11.dwpkg`. This is a **CHIM server extension**, with no ESP/ESL or Papyrus companion. Both your client and server must support game-bundled server-plugin synchronization, and the server needs PHP CLI worker execution. The older [verification record](docs/verification/release-0.1.1.md) identifies the tested platform; support across every historical CHIM build is not guaranteed. Actual MO2/game synchronization remains unverified in our test record.
+For 0.1.11, MO2 should expose `Data/CHIM/server-plugins/sworn_and_scorned/0.1.11.dwpkg`. This is a **CHIM server extension**, with no ESP/ESL or Papyrus companion. Both your client and server must support game-bundled server-plugin synchronization, and the server needs PHP CLI worker execution. The older [verification record](docs/verification/release-0.1.1.md) identifies the tested platform; support across every historical CHIM build is not guaranteed. Actual MO2/game synchronization remains unverified in our test record. The optional in-game interface does not change these existing CHIM compatibility requirements.
 
 The **0.1.11 MO2 ZIP** includes a minimal `meta.ini` for its version, project URL and installed-mod missing-content flag. It does not guarantee that MO2's initial installation-dialog warning disappears, add GitHub update polling, or repair CHIM connection errors. [Verification and limits](docs/verification/mo2-0.1.7.md).
 
@@ -77,7 +83,7 @@ This release is **0.1.11 — PRE-ALPHA**. On upgrading from 0.1.2, **reselect an
 
 ## Setup: nominate your disasters
 
-1. Open Sworn & Scorned's **Plugin Page**.
+1. In your browser, open CHIM's **Plugin Manager → Server Plugins → sworn_and_scorned → Plugin Page**. The existing web page remains usable without the new Skyrim interface.
 2. Enable it; the feature starts **off**.
 3. Select the NPCs to track and **Save settings**. There is no plugin-imposed cast cap: select any number of known NPCs. **Select all** selects the current list; it does not save automatically or enrol future NPCs. More eligible conversations mean more queued work and potential API charges. Without a cast, speech is not queued. Issues belong to NPC owners; the player or another NPC can be the counterpart.
 4. Leave **Use Jev — experimental** off for your CHIM relationship LLM, or enable it to reuse CHIM's OpenRouter credentials.

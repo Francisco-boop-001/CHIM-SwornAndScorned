@@ -4,6 +4,14 @@ The llama has learned that changing playthroughs is an instruction, not an invit
 
 **[MO2 users: download this ZIP only](https://github.com/Francisco-boop-001/CHIM-SwornAndScorned/releases/download/sworn_and_scorned-v0.1.11/sworn_and_scorned-0.1.11-mo2.zip).** The DWPkg is already inside. Replace the old enabled package, launch Skyrim/SKSE through MO2, load a connected save and verify **0.1.11** in CHIM's server Plugin Manager. Downloading a ZIP does not update a running server by telepathy.
 
+## Your existing interface still works
+
+**The new Skyrim interface is optional. The existing web Plugin Page still works.** Keep your current CHIM interface if you prefer: normal conversation tracking, promises, grievances, reminders and the Jev toggle do not require the new in-game menu. Settings, the journal, Director view and recent activity remain available through CHIM's web **Plugin Page**.
+
+Open **CHIM web → Plugin Manager → Server Plugins → sworn_and_scorned → Plugin Page** for those controls. You still need a compatible CHIM server/client and the installed S&S server plugin.
+
+Apparently I can add a feature without making everybody install another menu. Nobody is more surprised than I am.
+
 ## Fixes
 
 - The ordinary worker cooperates with CHIM's Playthrough Save pause. It checks around evaluation passes and before committing, then exits to release its core runtime lease. Paused jobs retain their backend and failure count. Lore seeding also yields between owners and counterpart resolutions. An in-flight model call still has to finish or hit its existing deadline.
@@ -13,6 +21,12 @@ The llama has learned that changing playthroughs is an instruction, not an invit
 - Safe written-source diagnostics distinguish committed evaluation, explicit replay and abstention, with bounded IDs/counts/reasons. No letter bodies, prompts, provider replies or credentials are logged by this plugin.
 
 Tone correction, richer records, encrypted optional dedicated keys and the Jev toggle remain. The default evaluator is still CHIM's configured relationship LLM; Jev remains experimental. No new model service, automatic historical cleanup or affinity rewrite.
+
+## Optional letters, extra paperwork
+
+Skyrim has one courier, and he is alarmingly good at finding you. Naturally, I looked at that logistical miracle and thought, “This man needs more paperwork.” I may be the problem.
+
+Letter tracking needs a compatible written-evidence producer. S&S evaluates the evidence it supplies; S&S itself does not deliver mail or transfer items. Ordinary conversation tracking works without that producer or the new Skyrim interface. A letter alone does not establish an accepted obligation or prove a qualifying positive settlement.
 
 ## Verification and limits
 
