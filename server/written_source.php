@@ -54,7 +54,11 @@ function writtenEvidenceStatus(Pg $pg, int $eventId): array
     if ($state === 'written_source_changed') return $reply('invalid',$state);
     if ($state === 'replay') {
         foreach ($ledger['written_sources'] as $source) {
-            if ($source['event_id'] === $eventId) return $reply('processed',$source['result']);
+            if ($source['event_id'] === $eventId) {
+                return $source['result'] === 'substance_budget'
+                    ? $reply('abstained','substance_budget')
+                    : $reply('processed',$source['result']);
+            }
         }
     }
     if ($state === 'written_capacity') return $reply('abstained',$state);

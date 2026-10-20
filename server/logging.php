@@ -6,12 +6,13 @@ namespace ChimSwornAndScorned;
 const LOG_FIELDS = [
     'job_id', 'owner_npc_id', 'npc_id', 'issue_id', 'outcome', 'reason', 'backend',
     'jobs', 'failures', 'pid', 'status', 'addresses', 'p', 'turn', 'cast_count',
-    'enabled', 'use_jev', 'duration_ms',
+    'enabled', 'use_jev', 'duration_ms', 'playthrough_id', 'source_event_id', 'source_result',
+    'origin_event_count', 'origin_codepoints',
 ];
 const LOG_EVENTS = [
     'worker_launch', 'lore_seeds_invalid', 'worker_started', 'worker_stopped',
     'worker_paused', 'worker_resumed', 'worker_error', 'jobs_queued', 'job_finished',
-    'lore_override_invalid', 'lore_owner_invalid', 'issue_surfaced', 'issue_evaluated',
+    'lore_override_invalid', 'lore_owner_invalid', 'issue_surfaced', 'issue_evaluated', 'written_source_finished',
     'settings_saved', 'settings_rejected', 'worker_restart_requested', 'key_updated',
     'key_removed', 'access_rejected', 'form_rejected',
 ];
@@ -22,13 +23,14 @@ const LOG_REASONS = [
     'connector_not_found', 'connector_request_failed', 'connector_request_invalid',
     'connector_timeout', 'connector_timeout_unavailable', 'connector_unavailable',
     'committed', 'counterpart_changed', 'counterpart_unresolved', 'csrf_invalid', 'disabled',
-    'edge_invalid', 'events_missing', 'form_invalid', 'http_429', 'internal_error',
+    'edge_invalid', 'events_missing', 'form_invalid', 'http_429', 'internal_error', 'interaction_changed',
     'issue_flag_invalid', 'jev_credentials_unavailable', 'job_invalid', 'key_invalid',
     'key_storage_unavailable', 'ledger_invalid', 'llm_request_failed', 'model_invalid',
     'model_response_empty', 'origin_invalid', 'owner_busy', 'owner_changed',
-    'playthrough_changed', 'request_invalid_json', 'response_invalid_json',
+    'playthrough_changed', 'playthrough_switch', 'request_invalid_json', 'response_invalid_json',
     'response_invalid_shape', 'replay', 'restore_policy', 'repeated_errors', 'transport_failed',
-    'transport_invalid_response', 'unchanged', 'uninstalled', 'unknown_failure',
+    'transport_invalid_response', 'unchanged', 'uninstalled', 'unknown_failure', 'written_source_invalid',
+    'written_source_changed', 'written_capacity', 'substance_budget',
 ];
 
 /** Build the only record shape allowed at either the writer or reader boundary. */
@@ -54,13 +56,27 @@ function sasLogRecord(string $event, string $level, array $fields, ?string $time
         }
         $value = $fields[$field];
         $safe = null;
-        if (in_array($field, ['job_id', 'owner_npc_id', 'npc_id', 'jobs', 'failures', 'pid', 'cast_count', 'duration_ms'], true)) {
-            $minimum = in_array($field, ['job_id', 'owner_npc_id', 'npc_id', 'pid'], true) ? 1 : 0;
-            $maximum = in_array($field, ['job_id', 'owner_npc_id', 'npc_id'], true) ? PHP_INT_MAX : 2147483647;
+        if (in_array($field, ['job_id', 'owner_npc_id', 'npc_id', 'source_event_id', 'jobs', 'failures', 'pid', 'cast_count', 'duration_ms', 'origin_event_count', 'origin_codepoints'], true)) {
+            $minimum = in_array($field, ['job_id', 'owner_npc_id', 'npc_id', 'source_event_id', 'pid'], true) ? 1 : 0;
+            $maximum = match ($field) {
+                'job_id', 'owner_npc_id', 'npc_id', 'source_event_id' => PHP_INT_MAX,
+                'origin_event_count' => 500,
+                'origin_codepoints' => 1000000,
+                default => 2147483647,
+            };
             $integer = is_int($value) ? $value : (is_string($value) && strlen($value) <= 19 ? filter_var($value, FILTER_VALIDATE_INT) : false);
             if (is_int($integer) && $integer >= $minimum && $integer <= $maximum) {
                 $safe = $integer;
             }
+        } elseif ($field === 'playthrough_id') {
+            if ($value === 'unprofiled') {
+                $safe = $value;
+            } elseif (is_string($value) && strlen($value) <= 19 && preg_match('/\A[1-9][0-9]*\z/D', $value) === 1
+                && is_int($scope = filter_var($value, FILTER_VALIDATE_INT)) && $scope > 0) {
+                $safe = (string) $scope;
+            }
+        } elseif ($field === 'source_result') {
+            $safe = is_string($value) && in_array($value, ['evaluated', 'abstained'], true) ? $value : 'unknown';
         } elseif ($field === 'issue_id') {
             if (is_string($value) && preg_match('/\A[a-f0-9]{16}\z/iD', $value) === 1) {
                 $safe = strtolower($value);

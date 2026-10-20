@@ -32,3 +32,8 @@ Thumbs.db
 
 # Private frozen provider runner depends on local evidence/bootstrap files.
 /tests/integration/written_quote_real_model.php
+
+!/docs/verification/fixes-0.1.11.md
+
+# Private cluster harness depends on a frozen local evidence identity.
+/tests/integration/repeated_dispute_it.php

@@ -41,6 +41,7 @@ final class PerspectiveStore
             return 'busy';
         }
         $committed = false;
+        $interactionLease = null;
         try {
             $this->pg->exec('BEGIN');
             $this->pg->exec("SET LOCAL lock_timeout = '1000ms'");
@@ -167,6 +168,20 @@ final class PerspectiveStore
                     }
                 }
             }
+            if (array_key_exists('interaction_generation', $request)) {
+                if (!is_int($request['interaction_generation']) || $request['interaction_generation'] < 0
+                    || !function_exists('chimInteractionFile') || !function_exists('chimInteractionRead')) return 'interaction_changed';
+                try {
+                    // Core's toggle takes LOCK_EX; keep this witness stable through the actual COMMIT.
+                    $interactionLease = \chimInteractionFile();
+                    if (!flock($interactionLease, LOCK_SH | LOCK_NB)) return 'interaction_changed';
+                    $interaction = \chimInteractionRead($interactionLease);
+                    if (($interaction['enabled'] ?? null) !== true
+                        || ($interaction['generation'] ?? null) !== $request['interaction_generation']) return 'interaction_changed';
+                } catch (\Throwable) {
+                    return 'interaction_changed';
+                }
+            }
             $updated = $this->pg->one(
                 "UPDATE core_npc_master
                  SET extended_data = {$extendedSql},
@@ -189,6 +204,7 @@ final class PerspectiveStore
                 } catch (\Throwable) {
                 }
             }
+            if (is_resource($interactionLease)) fclose($interactionLease);
             try {
                 $this->pg->exec('SELECT pg_advisory_unlock($1)', [$lockKey]);
             } catch (\Throwable) {

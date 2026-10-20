@@ -5,6 +5,11 @@ namespace ChimSwornAndScorned;
 
 require_once __DIR__ . '/rows.php';
 
+const MAX_SPOKEN_SUBSTANCE_CODEPOINTS = 640;
+const MAX_WRITTEN_SUBSTANCE_CODEPOINTS = 2000;
+const MAX_ORIGIN_CODEPOINTS = 5120;
+const MAX_ORIGIN_CAPSULES = 8;
+
 function writtenEvidenceCapability(): array
 {
     return [
@@ -12,8 +17,10 @@ function writtenEvidenceCapability(): array
         'input_type' => 'written_evidence',
         'source_event_type' => 'info',
         'source_marker' => 'written_evidence_v1',
-        'max_body_codepoints' => 2000,
-        'max_substance_codepoints' => 640,
+        'max_body_codepoints' => MAX_WRITTEN_SUBSTANCE_CODEPOINTS,
+        'max_substance_codepoints' => MAX_SPOKEN_SUBSTANCE_CODEPOINTS,
+        'max_written_substance_codepoints' => MAX_WRITTEN_SUBSTANCE_CODEPOINTS,
+        'max_origin_codepoints' => MAX_ORIGIN_CODEPOINTS,
         'recipient_only' => true,
     ];
 }
@@ -38,7 +45,7 @@ function writtenEvidenceValidUuid(mixed $value): bool
 function writtenEvidenceValidScope(mixed $value): bool
 {
     return is_string($value)
-        && ($value === 'unprofiled' || preg_match('/\A[1-9][0-9]*\z/', $value) === 1);
+        && ($value === 'unprofiled' || (strlen($value) <= 19 && preg_match('/\A[1-9][0-9]*\z/', $value) === 1));
 }
 
 function writtenEvidenceValidName(mixed $value): bool
@@ -73,7 +80,7 @@ function writtenActorKey(array $actor): string
 
 function writtenEvidenceValidFormId(mixed $value): bool
 {
-    return is_string($value)
+    return is_string($value) && strlen($value) <= 264
         && preg_match('/\A[A-Za-z0-9][A-Za-z0-9 _().-]*\.(?i:esm|esp|esl)\|[0-9A-F]{8}\z/', $value) === 1;
 }
 

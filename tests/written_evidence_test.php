@@ -94,6 +94,8 @@ check(
     && ($capability['source_marker'] ?? null) === 'written_evidence_v1'
     && ($capability['max_body_codepoints'] ?? null) === 2000
     && ($capability['max_substance_codepoints'] ?? null) === 640
+    && ($capability['max_written_substance_codepoints'] ?? null) === 2000
+    && ($capability['max_origin_codepoints'] ?? null) === 5120
     && ($capability['recipient_only'] ?? null) === true,
     'written evidence capability descriptor'
 );
@@ -217,6 +219,18 @@ foreach (['unprofiled', '1', '42'] as $scope) {
     $active = ['id' => $scope, 'player_name' => 'Hawke'];
     check(validateWrittenEnvelope($scoped, $active) === $scoped, 'canonical playthrough scope accepted');
 }
+$largestScope = $envelope;
+$largestScope['playthrough_id'] = '9223372036854775807';
+check(
+    validateWrittenEnvelope($largestScope, ['id' => $largestScope['playthrough_id'], 'player_name' => 'Hawke']) === $largestScope,
+    '19-digit playthrough scope remains accepted'
+);
+$oversizedScope = $envelope;
+$oversizedScope['playthrough_id'] = '19223372036854775807';
+check(
+    validateWrittenEnvelope($oversizedScope, ['id' => $oversizedScope['playthrough_id'], 'player_name' => 'Hawke']) === null,
+    'playthrough scope above the signed database ID bound is rejected'
+);
 $wrongScope = $envelope;
 $wrongScope['playthrough_id'] = '12';
 check(
@@ -276,6 +290,24 @@ for ($i = 1; $i <= 8; $i++) {
     ];
 }
 check(validateWrittenEnvelope($eightAttachments, $playthrough) !== null, 'eight distinct attachments accepted');
+$maxMetadataEnvelope = $eightAttachments;
+$maxMetadataEnvelope['body'] = str_repeat('🙂', 2000);
+$maxMetadataEnvelope['recipient']['name'] = str_repeat('R', 128);
+$maxMetadataEnvelope['claimed_sender']['name'] = str_repeat('S', 128);
+for ($i = 1; $i <= 8; $i++) {
+    $maxMetadataEnvelope['attachments'][$i - 1]['form_id'] =
+        chr(ord('A') + $i - 1) . str_repeat('A', 250) . '.esp|' . sprintf('%08X', $i);
+}
+$maxMetadataJson = json_encode(
+    $maxMetadataEnvelope,
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR
+);
+check(
+    strlen($maxMetadataEnvelope['attachments'][0]['form_id']) === 264
+    && strlen($maxMetadataJson) > 8000
+    && validateWrittenEnvelope($maxMetadataEnvelope, $playthrough) === $maxMetadataEnvelope,
+    '2000-codepoint body remains valid with bounded maximum-name and eight maximum-length attachments'
+);
 $tooManyAttachments = $eightAttachments;
 $tooManyAttachments['attachments'][] = ['kind' => 'item', 'form_id' => 'Other.esp|00000001', 'quantity' => 1];
 $rejectEnvelope($tooManyAttachments, 'attachment count above eight rejected');
@@ -292,6 +324,7 @@ foreach ([
     ['kind' => 'gold', 'form_id' => 'Skyrim.esm|0000000F', 'quantity' => true],
     ['kind' => 'gold', 'form_id' => 'Example.esp|00000001', 'quantity' => 50],
     ['kind' => 'unknown', 'form_id' => 'Example.esp|00000001', 'quantity' => 1],
+    ['kind' => 'item', 'form_id' => str_repeat('A', 252) . '.esp|00000001', 'quantity' => 1],
     ['kind' => 'item', 'form_id' => 'Skyrim.esm|0000000f', 'quantity' => 1],
     ['kind' => 'item', 'form_id' => 'Example.esp|0000000', 'quantity' => 1],
     ['kind' => 'item', 'form_id' => '|00000001', 'quantity' => 1],

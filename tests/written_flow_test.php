@@ -6,7 +6,7 @@ require __DIR__.'/support/written_fixture.php';
 require __DIR__.'/../server/queue.php';
 require __DIR__.'/support/scripted_backend.php';
 require __DIR__.'/../server/page_view.php';
-use function ChimSwornAndScorned\{writtenLineFromEventRow,pairLinesWitnessedBy,perspectivesOf,buildState,evaluatePerspective,applyProposal,emptyLedger,normalizeLedger,renderNote,renderIssue,issueSummary};
+use function ChimSwornAndScorned\{writtenLineFromEventRow,pairLinesWitnessedBy,perspectivesOf,buildState,evaluatePerspective,applyProposal,emptyLedger,normalizeLedger,renderNote,renderIssue,issueSummary,substanceCandidates,substanceContext};
 use const ChimSwornAndScorned\POLICY_DECISION_MODEL;
 $pt=['id'=>'unprofiled','player_name'=>'Hawke'];
 $line=writtenLineFromEventRow(writtenFixture(),$pt);
@@ -74,14 +74,29 @@ $p=evaluatePerspective($ctx,new ScriptedBackend($u),POLICY_DECISION_MODEL);check
 $l=emptyLedger('unprofiled');$l['issues']=[$credit];$creditMeta=$meta;$creditMeta['source_lines']=[$creditLine];$r=applyProposal($l,$p,$creditMeta);
 check($r['ledger']['issues'][0]['status']==='released' && $r['affinity_delta']===0,'creditor release changes lifecycle without affinity');
 $u['written.attribution']=$a(false);check(evaluatePerspective($ctx,new ScriptedBackend($u),POLICY_DECISION_MODEL)['updates']===[],'doubted creditor cannot release debt');
-// Complete origin limit applies to exact body, not truncated typed candidates.
+// Speech retains its existing cap while validated letters use their separate allowance.
 foreach([640,641] as $n){
+    $spoken=sampleLine(45+$n,'Farkas',str_repeat('x',$n));
+    check(count(substanceCandidates([$spoken]))===($n===640?1:0),'ordinary speech candidate retains exact '.$n.' codepoint boundary');
+    check((substanceContext([$spoken])!==null)===($n===640),'ordinary speech context retains exact '.$n.' codepoint boundary');
     $bounded=$line;$bounded['text']=str_repeat('x',$n);$bounded['written']['body']=$bounded['text'];
     $c=['owner'=>'Lydia','counterpart'=>'Farkas','lines'=>[$bounded],'open_issues'=>[]];
     $p=evaluatePerspective($c,new ScriptedBackend($wrong),POLICY_DECISION_MODEL);
-    check(count($p['new_issues'])===($n===640?1:0),'exact '.$n.' codepoint substance boundary');
-    check(ChimSwornAndScorned\writtenSourceEntry($bounded)['result']===($n===640?'evaluated':'substance_budget'),'creation-budget abstention is distinct');
+    check(count($p['new_issues'])===1,'validated written body at '.$n.' codepoints remains evaluable');
+    check(ChimSwornAndScorned\writtenSourceEntry($bounded)['result']==='evaluated','written source at '.$n.' codepoints is not budget-abstained');
 }
+$longBody=str_repeat('🙂',728);$longWritten=writtenLineFromEventRow(writtenFixture(47,$longBody),$pt);
+check($longWritten!==null,'valid 728-codepoint written body reaches SAS');
+$longCtx=['owner'=>'Lydia','counterpart'=>'Farkas','lines'=>[$longWritten],'open_issues'=>[]];
+$longProposal=evaluatePerspective($longCtx,new ScriptedBackend($wrong),POLICY_DECISION_MODEL);
+check(count($longProposal['new_issues'])===1 && $longProposal['new_issues'][0]['substance']['matter']['text']===$longBody,
+    'valid written body above the speech limit is evaluated with its exact text');
+check(ChimSwornAndScorned\writtenSourceEntry($longWritten,[$longWritten])['result']==='evaluated',
+    'valid written source above the speech limit is not terminally budget-abstained');
+$longMeta=$meta;$longMeta['event_ids']=[47];$longMeta['source_lines']=[$longWritten];
+$longStored=applyProposal(emptyLedger('unprofiled'),$longProposal,$longMeta);
+check($longStored['status']==='applied' && $longStored['ledger']['issues'][0]['substance']['context'][0]['text']===$longBody,
+    'valid long written body survives persisted substance validation unchanged');
 // Spoken recipient acceptance can support an attributed written proposal; the sender stays absent.
 $accept=sampleLine(42,'Lydia','I accept your promise to return my 50 septims tomorrow.');
 $offered=writtenLineFromEventRow(writtenFixture(41,'I promise I will return your 50 septims tomorrow. Delivering your steel shield instead will also settle this agreement.'),$pt);

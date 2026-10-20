@@ -203,6 +203,9 @@ final class PgJobDeps implements JobDeps
 
     public function commitLedger(array $request, callable $mutate): string
     {
+        if (array_key_exists('_interaction_generation', $this->settings)) {
+            $request['interaction_generation'] = $this->settings['_interaction_generation'];
+        }
         return $this->store->commitLedger($request, $mutate);
     }
 }
@@ -231,7 +234,7 @@ function workerTick(Pg $pg, #[\SensitiveParameter] array $settings, int $now, ?c
     if ($job === null) {
         return false;
     }
-    $deps = new PgJobDeps($pg, new PerspectiveStore($pg), $playthrough, $settings, $transport ?? curlTransport(), $completion ?? relationshipConnectorCompletion(1024, $job['owner_name'], $playthrough['player_name']));
+    $deps = new PgJobDeps($pg, new PerspectiveStore($pg), $playthrough, $settings, $transport ?? curlTransport(), $completion ?? relationshipConnectorCompletion(1024, $job['owner_name'], $playthrough['player_name'], 20, array_key_exists('_interaction_generation', $settings)));
     $started = hrtime(true);
     try {
         $result = processJob($job, $deps);
@@ -288,6 +291,7 @@ function seedLoreOnce(Pg $pg, PerspectiveStore $store, array $playthrough, array
         $rowsByName[mb_strtolower($row['npc_name'])][] = $row;
     }
     $resolve = static function (string $counterpart) use ($pg): ?string {
+        if (function_exists('ptr_runtime_paused') && \ptr_runtime_paused()) return null;
         if (str_starts_with($counterpart, 'daedra:')) {
             return $counterpart;
         }
@@ -296,6 +300,7 @@ function seedLoreOnce(Pg $pg, PerspectiveStore $store, array $playthrough, array
     };
     $committed = 0;
     foreach ($rowsByName as $name => $matches) {
+        if (function_exists('ptr_runtime_paused') && \ptr_runtime_paused()) break;
         if (count($matches) !== 1) {
             continue; // ambiguous owner name
         }

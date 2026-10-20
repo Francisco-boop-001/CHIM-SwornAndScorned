@@ -161,9 +161,9 @@ function relationshipConnectorDirectCompletion(int $maxTokens = 1024, string $ac
 }
 
 /** The native stream reader cannot be interrupted reliably by a PHP signal handler. */
-function relationshipConnectorCompletion(int $maxTokens = 1024, string $actorName = 'The Narrator', string $playerName = 'Player', int $timeoutSeconds = 20): callable
+function relationshipConnectorCompletion(int $maxTokens = 1024, string $actorName = 'The Narrator', string $playerName = 'Player', int $timeoutSeconds = 20, bool $foreground = false): callable
 {
-    return static function (array $messages) use ($maxTokens, $actorName, $playerName, $timeoutSeconds): string {
+    return static function (array $messages) use ($maxTokens, $actorName, $playerName, $timeoutSeconds, $foreground): string {
         $root = realpath((string) ($GLOBALS['ENGINE_PATH'] ?? ''));
         $id = relationshipConnectorId();
         if ($root === false || !is_file($root . '/main.php') || $id === null || $timeoutSeconds < 1 || PHP_SAPI !== 'cli'
@@ -173,8 +173,12 @@ function relationshipConnectorCompletion(int $maxTokens = 1024, string $actorNam
         // No credential passed in arguments or request IPC. The child resolves the CHIM connector itself.
         $wire = json_encode(['connector_id'=>$id, 'max_tokens'=>$maxTokens, 'actor'=>$actorName, 'player'=>$playerName, 'messages'=>$messages], JSON_THROW_ON_ERROR);
         if (strlen($wire) > 2097152) throw new \RuntimeException('connector_request_invalid');
+        // A bounded settled worker owns the outer process group, including its REL helper.
+        $command = ['/usr/bin/timeout', '--signal=KILL'];
+        if ($foreground) $command[] = '--foreground';
+        array_push($command, $timeoutSeconds . 's', PHP_BINARY, __DIR__ . '/llm_request.php', $root);
         $process = @proc_open(
-            ['/usr/bin/timeout', '--signal=KILL', $timeoutSeconds . 's', PHP_BINARY, __DIR__ . '/llm_request.php', $root],
+            $command,
             [0=>['pipe','r'], 1=>['pipe','w'], 2=>['file','/dev/null','a']], $pipes
         );
         if (!is_resource($process)) throw new \RuntimeException('connector_request_failed');

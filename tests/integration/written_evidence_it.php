@@ -35,17 +35,25 @@ try {
         $body=json_decode($row['data'],true);$body['playthrough_id']=$pt['id'];
         return (int)$pg->one('INSERT INTO sas_it.eventlog(type,sess,data,people,gamets,localts,delivery_state) VALUES($1,$2,$3,$4,100,100,NULL) RETURNING rowid',[$row['type'],$row['sess'],json_encode($body,JSON_THROW_ON_ERROR),$row['people']])['rowid'];
     };
+    $uniqueSource=static function(array $row,int $n):array {
+        $body=json_decode($row['data'],true,512,JSON_THROW_ON_ERROR);$prefix=sprintf('%08x',$n);
+        $body['document_id']=$prefix.'-1111-4111-8111-111111111111';
+        $body['receipt']['receipt_id']=$prefix.'-2222-4222-8222-222222222222';
+        $body['receipt']['operation_id']=$prefix.'-3333-4333-8333-333333333333';
+        $row['data']=json_encode($body,JSON_THROW_ON_ERROR);return $row;
+    };
     $a=static fn(mixed $v):array=>['value'=>$v,'p'=>0.99];
     $answers=['commitment'=>$a(false),'wronged'=>$a(true),'written.attribution'=>$a(true),'grievance.line'=>$a('L1'),'grievance.wants'=>$a('unknown'),'grievance.matter'=>$a('L1'),'grievance.nature'=>$a('insult'),'grievance.settlement'=>$a('unknown')];
     $deps=new class($pg,$pt,$answers) implements JobDeps {
         public ?Closure $beforeCommit=null;
+        public int $backendSelections=0;
         public function __construct(private Pg $pg,private array $pt,private array $answers){}
         public function setAnswers(array $answers):void{$this->answers=$answers;}
         public function currentPlaythroughId():?string{return currentPlaythrough($this->pg)['id']??null;}
         public function linesFor(array $ids):array{$out=[];foreach($ids as $id){$l=readEvidenceLine($this->pg,$id,$this->pt);if($l!==null)$out[]=$l;}return $out;}
         public function ledgerFor(int $id,string $pt):array{$r=$this->pg->one("SELECT (plugin_extended_data->'sworn_and_scorned')::text AS l FROM sas_it.core_npc_master WHERE id=$1",[$id]);return normalizeLedger($r['l']===null?null:json_decode($r['l'],true),$pt);}
         public function counterpartKey(string $name):?string{return $name==='Farkas'?'npc:900002':null;}
-        public function backend(string $kind):?array{return [new ScriptedBackend($this->answers),POLICY_DECISION_MODEL];}
+        public function backend(string $kind):?array{++$this->backendSelections;return [new ScriptedBackend($this->answers),POLICY_DECISION_MODEL];}
         public function commitLedger(array $request,callable $mutate):string{if($this->beforeCommit!==null)($this->beforeCommit)();return (new PerspectiveStore($this->pg))->commitLedger($request,$mutate);}
     };
     // Status/enqueue must not decrypt/migrate even an inherited legacy dedicated key.
@@ -87,6 +95,15 @@ try {
     check($deps->ledgerFor(900002,$pt['id'])['issues']===[],'claimed author ledger untouched');
     check(str_contains(renderIssue($issue,900001,'csrf',true),'Claimed sender') && str_contains(renderNote($issue,'Lydia','Farkas'),'letter'),'journal and reminder label attribution');
     check(writtenEvidenceStatus($pg,$id)['status']==='processed','public completion requires persisted marker');
+    $budgetId=$publish($uniqueSource(writtenFixture(),80));$budgetLine=readEvidenceLine($pg,$budgetId,$pt);
+    $budgetEntry=ChimSwornAndScorned\writtenSourceEntry($budgetLine);$budgetEntry['result']='substance_budget';
+    $budgetLedger=$deps->ledgerFor(900001,$pt['id']);$budgetLedger['written_sources'][]=$budgetEntry;
+    $pg->exec("UPDATE sas_it.core_npc_master SET plugin_extended_data=jsonb_set(plugin_extended_data,'{sworn_and_scorned}',$1::jsonb) WHERE id=900001",[json_encode($budgetLedger,JSON_THROW_ON_ERROR)]);
+    $backendSelections=$deps->backendSelections;$jobCount=(int)$pg->one('SELECT count(*) AS n FROM sas_it.sworn_scorned_jobs')['n'];
+    check(writtenEvidenceStatus($pg,$budgetId)===['status'=>'abstained','reason'=>'substance_budget'],'legacy terminal budget marker is publicly abstained');
+    check(enqueueWrittenEvidence($pg,$budgetId)===['status'=>'abstained','reason'=>'substance_budget'],'legacy budget marker cannot be re-enqueued');
+    check($deps->backendSelections===$backendSelections && (int)$pg->one('SELECT count(*) AS n FROM sas_it.sworn_scorned_jobs')['n']===$jobCount,'legacy budget replay performs no backend selection or job creation');
+    check($deps->ledgerFor(900001,$pt['id'])===$budgetLedger,'legacy terminal budget marker is not migrated or reopened');
     $count=(int)$pg->one('SELECT count(*) AS n FROM sas_it.core_npc_master_history')['n'];
     check(processJob($job,$deps)===['outcome'=>'done','reason'=>'replay'],'exact replay no model effect');
     check((int)$pg->one('SELECT count(*) AS n FROM sas_it.core_npc_master_history')['n']===$count,'replay no history');

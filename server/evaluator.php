@@ -5,6 +5,7 @@ namespace ChimSwornAndScorned;
 
 require_once __DIR__ . '/backend.php';
 require_once __DIR__ . '/questions.php';
+require_once __DIR__ . '/transitions.php';
 
 /**
  * Judge one perspective (owner about counterpart) over the lines the owner witnessed.
@@ -14,7 +15,7 @@ require_once __DIR__ . '/questions.php';
  * @param array $ctx {owner, counterpart, lines: list<line> (already witness-filtered), open_issues: list<issue>}
  * @return array{new_issues: list<array>, updates: list<array>}
  */
-function evaluatePerspective(array $ctx, DecisionBackend $backend, array $policy, ?callable $audit = null): array
+function evaluatePerspective(array $ctx, DecisionBackend $backend, array $policy, ?callable $audit = null, ?callable $checkpoint = null): array
 {
     $proposal = ['new_issues' => [], 'updates' => []];
     if ($ctx['lines'] === []) {
@@ -24,7 +25,9 @@ function evaluatePerspective(array $ctx, DecisionBackend $backend, array $policy
     $detect = $policy['detect_min'];
 
     $pass1 = pass1Questions($ctx);
+    if ($checkpoint !== null) $checkpoint();
     $answers1 = validatedAnswers($pass1, $backend->ask($state, $pass1));
+    if ($checkpoint !== null) $checkpoint();
     if ($audit !== null) {
         foreach ($ctx['open_issues'] as $issue) {
             $answer = $answers1['addresses:' . $issue['id']] ?? null;
@@ -47,7 +50,9 @@ function evaluatePerspective(array $ctx, DecisionBackend $backend, array $policy
         if (!isset($sourceLine['written']) && $sourceLine['speaker'] === $ctx['owner']) $ownerSpoke = true;
     }
     $pass2 = pass2Questions($ctx, $positives);
+    if ($checkpoint !== null) $checkpoint();
     $answers2 = validatedAnswers($pass2, $backend->ask($state, $pass2));
+    if ($checkpoint !== null) $checkpoint();
     $lines = lineLabels($ctx['lines']);
     $candidates = $state['substance_candidates'];
     $substanceContext = substanceContext($ctx['lines']);
@@ -215,7 +220,8 @@ function evaluatePerspective(array $ctx, DecisionBackend $backend, array $policy
         $qualifies = $originalPromise !== null && $relatedUpdate !== null && match ($newIssue['kind']) {
             'promise' => $relatedUpdate['status'] === 'renegotiated'
                 && $originalPromise['direction'] === $newIssue['direction'],
-            'grievance' => in_array($relatedUpdate['status'], ['broken', 'disputed'], true),
+            'grievance' => in_array($relatedUpdate['status'], ['broken', 'disputed'], true)
+                && transitionAllowed('promise', $originalPromise['status'], $relatedUpdate['status']),
             default => false,
         };
         if (!$qualifies) {

@@ -3,11 +3,12 @@ declare(strict_types=1);
 
 require __DIR__ . '/support/check.php';
 require __DIR__ . '/support/fixtures.php';
+require __DIR__ . '/support/written_fixture.php';
 require __DIR__ . '/../server/jobs.php';
 require __DIR__ . '/support/scripted_backend.php';
 
 use ChimSwornAndScorned\{DecisionBackend, DecisionBackendError, JobDeps};
-use function ChimSwornAndScorned\{emptyLedger, issueId, nextStep, processJob};
+use function ChimSwornAndScorned\{emptyLedger, issueId, nextStep, processJob, writtenLineFromEventRow, writtenSourceEntry};
 use const ChimSwornAndScorned\{POLICY_DECISION_MODEL, POLICY_LLM_FALLBACK};
 
 final class FakeDeps implements JobDeps
@@ -183,6 +184,11 @@ $deps->commitStatus = 'playthrough_changed';
 check(processJob($job, $deps) === ['outcome' => 'stale', 'reason' => 'playthrough_changed'], 'commit-time playthrough change is stale');
 
 $deps = $freshDeps($promiseAnswers);
+$deps->commitStatus = 'interaction_changed';
+check(processJob($job, $deps) === ['outcome' => 'stale', 'reason' => 'interaction_changed'], 'Off/On rejection retains its specific stale reason');
+check($deps->ledger['issues'] === [], 'rejected interaction generation writes no evaluated issue');
+
+$deps = $freshDeps($promiseAnswers);
 $deps->commitStatus = 'busy';
 check(processJob($job, $deps) === ['outcome' => 'retry', 'reason' => 'owner_busy'], 'busy owner retries');
 
@@ -213,5 +219,97 @@ check(nextStep('failed', 1, 'decisions', true) === ['action' => 'retry', 'delay'
 check(nextStep('retry', 1, 'llm', true)['delay'] === 30, 'fallback starts its own retry schedule');
 check(nextStep('retry', 4, 'llm', true) === ['action' => 'fail'], 'exhausted fallback fails');
 check(nextStep('failed', 1, 'llm', true) === ['action' => 'fail'], 'permanent fallback error fails immediately');
+
+$writtenRow = writtenFixture(47, str_repeat('🙂', 728));
+$writtenEnvelope = json_decode($writtenRow['data'], true, 512, JSON_THROW_ON_ERROR);
+$writtenEnvelope['playthrough_id'] = 'unprofiled';
+$writtenEnvelope['recipient']['id'] = 5124;
+$writtenEnvelope['claimed_sender']['id'] = 3;
+$writtenRow['data'] = json_encode($writtenEnvelope, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+$writtenLine = writtenLineFromEventRow($writtenRow, ['id' => 'unprofiled', 'player_name' => 'Hawke']);
+check($writtenLine !== null, 'validated written source fixture parses for job diagnostics');
+$writtenAnswers = [
+    'commitment' => ['value' => false, 'p' => 0.99],
+    'wronged' => ['value' => true, 'p' => 0.99],
+    'written.attribution' => ['value' => true, 'p' => 0.99],
+    'grievance.line' => ['value' => 'L1', 'p' => 0.99],
+    'grievance.wants' => ['value' => 'unknown', 'p' => 0.99],
+    'grievance.matter' => ['value' => 'L1', 'p' => 0.99],
+    'grievance.nature' => ['value' => 'insult', 'p' => 0.99],
+    'grievance.settlement' => ['value' => 'unknown', 'p' => 0.99],
+];
+$writtenDeps = new FakeDeps();
+$writtenDeps->playthrough = 'unprofiled';
+$writtenDeps->lines = [$writtenLine];
+$writtenDeps->backends['decisions'] = [new ObservingBackend($writtenDeps, $writtenAnswers), POLICY_DECISION_MODEL];
+$writtenJob = $job;
+$writtenJob['id'] = 47;
+$writtenJob['playthrough_id'] = 'unprofiled';
+$writtenJob['event_ids'] = [47];
+$logFile = tempnam(sys_get_temp_dir(), 'sas-written-job');
+check(is_string($logFile), 'temporary written-source job log created');
+$oldErrorLog = ini_get('error_log');
+ini_set('error_log', $logFile);
+try {
+    check(processJob($writtenJob, $writtenDeps) === ['outcome' => 'done', 'reason' => 'committed'], 'validated written source job commits');
+    $committedLog = (string) file_get_contents($logFile);
+} finally {
+    if (is_string($oldErrorLog)) ini_set('error_log', $oldErrorLog);
+    @unlink($logFile);
+}
+check(str_contains($committedLog, '"event":"written_source_finished"') && str_contains($committedLog, '"source_result":"evaluated"')
+    && str_contains($committedLog, '"reason":"committed"') && str_contains($committedLog, '"job_id":47')
+    && str_contains($committedLog, '"owner_npc_id":5124') && str_contains($committedLog, '"playthrough_id":"unprofiled"')
+    && str_contains($committedLog, '"source_event_id":47') && str_contains($committedLog, '"origin_event_count":1')
+    && str_contains($committedLog, '"origin_codepoints":728'), 'full written evaluation logs only bounded job/source/scope/count provenance');
+check(!str_contains($committedLog, str_repeat('🙂', 728)) && !str_contains($committedLog, 'Lydia') && !str_contains($committedLog, 'Farkas'), 'written-source diagnostic excludes names and letter body');
+
+$staleLine = $writtenLine;
+$staleLine['event_id'] = 48;
+$staleDeps = new FakeDeps();
+$staleDeps->playthrough = 'unprofiled';
+$staleDeps->lines = [$staleLine];
+$staleDeps->commitStatus = 'events_missing';
+$staleDeps->backends['decisions'] = [new ObservingBackend($staleDeps, $writtenAnswers), POLICY_DECISION_MODEL];
+$staleJob = $writtenJob;
+$staleJob['id'] = 48;
+$staleJob['event_ids'] = [48];
+$logFile = tempnam(sys_get_temp_dir(), 'sas-written-stale');
+check(is_string($logFile), 'temporary stale-source log created');
+$oldErrorLog = ini_get('error_log');
+ini_set('error_log', $logFile);
+try {
+    check(processJob($staleJob, $staleDeps) === ['outcome' => 'stale', 'reason' => 'events_missing'], 'written source with failed commit stays stale');
+    $staleLog = (string) file_get_contents($logFile);
+} finally {
+    if (is_string($oldErrorLog)) ini_set('error_log', $oldErrorLog);
+    @unlink($logFile);
+}
+check(!str_contains($staleLog, 'written_source_finished') && !str_contains($staleLog, '"source_result":"evaluated"'), 'failed durable commit cannot be reported as a written evaluation');
+
+$budgetLine = $writtenLine;
+$budgetLine['event_id'] = 49;
+$budgetDeps = new FakeDeps();
+$budgetDeps->playthrough = 'unprofiled';
+$budgetDeps->lines = [$budgetLine];
+$budgetEntry = writtenSourceEntry($budgetLine);
+$budgetEntry['result'] = 'substance_budget';
+$budgetDeps->ledger['written_sources'] = [$budgetEntry];
+$budgetJob = $writtenJob;
+$budgetJob['id'] = 49;
+$budgetJob['event_ids'] = [49];
+$logFile = tempnam(sys_get_temp_dir(), 'sas-written-replay');
+check(is_string($logFile), 'temporary terminal replay log created');
+$oldErrorLog = ini_get('error_log');
+ini_set('error_log', $logFile);
+try {
+    check(processJob($budgetJob, $budgetDeps) === ['outcome' => 'done', 'reason' => 'replay'], 'legacy budget marker remains terminal replay');
+    $budgetReplayLog = (string) file_get_contents($logFile);
+} finally {
+    if (is_string($oldErrorLog)) ini_set('error_log', $oldErrorLog);
+    @unlink($logFile);
+}
+check($budgetDeps->backendRequests === [] && str_contains($budgetReplayLog, '"source_result":"abstained"')
+    && str_contains($budgetReplayLog, '"reason":"substance_budget"') && str_contains($budgetReplayLog, '"source_event_id":49'), 'legacy budget replay abstains without backend selection and keeps source correlation');
 
 echo "jobs checks passed\n";

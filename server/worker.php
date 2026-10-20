@@ -11,6 +11,7 @@ $arguments = $argv ?? [];
 // Core's launcher adopts any process matching worker.php.*--daemon; use our own flag.
 $daemon = in_array('--sas-daemon', $arguments, true);
 $once = in_array('--once', $arguments, true);
+$settleOnce = in_array('--settle-once', $arguments, true);
 if ($engineRoot === false || !is_file($engineRoot . '/main.php')) {
     fwrite(STDERR, "engine root not found\n");
     exit(1);
@@ -50,10 +51,24 @@ require_once $engineRoot . '/lib/logger.php';
 require_once $engineRoot . '/lib/settings.php';
 require_once __DIR__ . '/queue.php';
 
+$interactionGeneration = null;
+$settleDeadline = null;
+if ($settleOnce) {
+    try {
+        require_once $engineRoot . '/lib/chim_interaction.php';
+        if (!\chimInteractionAllowed()) exit(0);
+        $interactionGeneration = $GLOBALS['chim_interaction_generation'];
+        if (!is_int($interactionGeneration) || $interactionGeneration < 0) exit(1);
+        $settleDeadline = hrtime(true) + (SETTLE_SECONDS + 1) * 1000000000;
+    } catch (\Throwable) {
+        exit(1);
+    }
+}
+
 $pg = openEngineConnection($engineRoot);
 ensureSchema($pg);
 try {
-    $seeds = loadSeeds(__DIR__, $engineRoot);
+    $seeds = $settleOnce ? [] : loadSeeds(__DIR__, $engineRoot);
 } catch (\Throwable) {
     $seeds = [];
     sasLog('lore_seeds_invalid', 'error');
@@ -65,12 +80,23 @@ $errors = 0;
 $paused = null;
 
 while (true) {
+    if (function_exists('ptr_runtime_paused') && \ptr_runtime_paused()) {
+        sasLog('worker_stopped', 'info', ['reason' => 'playthrough_switch']);
+        exit(0); // Release core's process-lifetime lease before the switch deadline.
+    }
     if (!is_file(__FILE__)) {
         sasLog('worker_stopped', 'info', ['reason' => 'uninstalled']);
         exit(0);
     }
     $worked = false;
     try {
+        if ($settleOnce) {
+            if (!\chimInteractionAllowed() || $GLOBALS['chim_interaction_generation'] !== $interactionGeneration) {
+                sasLog('worker_stopped', 'info', ['reason' => 'interaction_changed']);
+                exit(0);
+            }
+            if (hrtime(true) > $settleDeadline) exit(0);
+        }
         if (function_exists('chimLoadGeneralSettingsIntoGlobals')) {
             \chimLoadGeneralSettingsIntoGlobals();
         }
@@ -84,13 +110,18 @@ while (true) {
             if ($paused !== $reason) sasLog('worker_paused', 'info', ['reason' => $reason]);
             $paused = $reason;
             $errors = 0;
-            if ($once) exit(0);
+            if ($once || $settleOnce) exit(0);
             sleep(2);
             continue;
         }
         if ($paused !== null) sasLog('worker_resumed', 'info');
         $paused = null;
+        if ($settleOnce) $settings['_interaction_generation'] = $interactionGeneration;
         $worked = workerTick($pg, $settings, time());
+        if (function_exists('ptr_runtime_paused') && \ptr_runtime_paused()) {
+            sasLog('worker_stopped', 'info', ['reason' => 'playthrough_switch']);
+            exit(0); // Release core's process-lifetime lease before the switch deadline.
+        }
         if ($seeds !== [] && time() - $lastLore >= LORE_INTERVAL_SECONDS) {
             $lastLore = time();
             $playthrough = currentPlaythrough($pg);
@@ -102,7 +133,7 @@ while (true) {
         $errors = 0;
     } catch (\Throwable $error) {
         sasLog('worker_error', 'error', ['reason' => substr(get_class($error), 0, 60)]);
-        if ($once) exit(1);
+        if ($once || $settleOnce) exit(1);
         if (++$errors >= 5) {
             sasLog('worker_stopped', 'error', ['reason' => 'repeated_errors']);
             exit(1);
@@ -112,10 +143,10 @@ while (true) {
         } catch (\Throwable) {
         }
     }
-    if ($once) {
+    if ($once || ($settleOnce && $worked)) {
         exit(0);
     }
     if (!$worked) {
-        sleep(2);
+        sleep($settleOnce ? 1 : 2);
     }
 }

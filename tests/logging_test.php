@@ -8,6 +8,7 @@ require __DIR__ . '/../server/backend_error.php';
 use ChimSwornAndScorned\DecisionBackendError;
 use function ChimSwornAndScorned\recentPluginLogs;
 use function ChimSwornAndScorned\sasLog;
+use function ChimSwornAndScorned\sasLogRecord;
 
 $file = tempnam(sys_get_temp_dir(), 'saslog');
 check(is_string($file), 'temporary log created');
@@ -36,6 +37,32 @@ try {
         sasLog('issue_evaluated', 'info', ['reason' => $reason]);
     }
     sasLog('settings_saved', 'info', ['cast_count' => 8, 'enabled' => true, 'use_jev' => false, 'duration_ms' => 123]);
+    sasLog('written_source_finished', 'info', [
+        'job_id' => 3000000000,
+        'owner_npc_id' => 900001,
+        'playthrough_id' => 'unprofiled',
+        'source_event_id' => 47,
+        'source_result' => 'evaluated',
+        'reason' => 'committed',
+        'origin_event_count' => 8,
+        'origin_codepoints' => 5120,
+        'owner_name' => 'private name',
+        'source_body' => 'private letter body',
+    ]);
+    sasLog('written_source_finished', 'info', [
+        'job_id' => 3000000000,
+        'owner_npc_id' => 900001,
+        'playthrough_id' => '42',
+        'source_event_id' => 48,
+        'source_result' => 'abstained',
+        'reason' => 'substance_budget',
+        'origin_event_count' => 9,
+        'origin_codepoints' => 5121,
+        'source_body' => 'private letter body',
+    ]);
+    foreach (['written_source_invalid', 'written_source_changed', 'written_capacity'] as $reason) {
+        sasLog('job_finished', 'warning', ['reason' => $reason]);
+    }
     foreach (['settings_rejected', 'worker_restart_requested', 'key_updated', 'key_removed', 'access_rejected', 'form_rejected'] as $event) {
         sasLog($event, 'warning');
     }
@@ -52,14 +79,22 @@ foreach (['settings_saved', 'settings_rejected', 'worker_restart_requested', 'ke
     check(str_contains($logged, '"event":"' . $event . '"'), 'fixed settings event retained');
 }
 check(str_contains($logged, '"cast_count":8') && str_contains($logged, '"enabled":true') && str_contains($logged, '"use_jev":false') && str_contains($logged, '"duration_ms":123'), 'settings diagnostics retain bounded typed fields');
+check(str_contains($logged, '"event":"written_source_finished"') && str_contains($logged, '"source_event_id":47')
+    && str_contains($logged, '"source_result":"evaluated"') && str_contains($logged, '"playthrough_id":"unprofiled"')
+    && str_contains($logged, '"origin_event_count":8') && str_contains($logged, '"origin_codepoints":5120'), 'written-source completion retains only bounded typed provenance');
+check(str_contains($logged, '"source_event_id":48') && str_contains($logged, '"source_result":"abstained"')
+    && str_contains($logged, '"reason":"substance_budget"'), 'terminal substance-budget replay is distinguishable from evaluation');
+foreach (['written_source_invalid', 'written_source_changed', 'written_capacity', 'substance_budget'] as $reason) {
+    check(str_contains($logged, '"reason":"' . $reason . '"'), 'written evidence reason retained: ' . $reason);
+}
 check(str_contains($logged, '"timestamp":"') && preg_match('/"timestamp":"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"/', $logged) === 1, 'record has an ISO8601 UTC timestamp');
 check(str_contains($logged, '"schema_version":1'), 'record has a stable schema version');
 check(str_contains($logged, '"issue_id":"0123456789abcdef"') && str_contains($logged, '"addresses":true') && str_contains($logged, '"p":0.91') && str_contains($logged, '"turn":"12345"'), 'safe diagnostic identifiers and typed values retained');
 check(str_contains($logged, '"event":"unknown_event"') && str_contains($logged, '"level":"warning"') && str_contains($logged, '"reason":"internal_error"') && str_contains($logged, '"backend":"unknown"'), 'unknown and hostile values normalize safely');
-foreach (['secret dialogue', 'secret prompt', 'secret key', 'secret token', 'secret-key-123456', 'sk-secret-token-value', 'raw_dialogue', 'forged=true', 'The NPC said the secret phrase', '"text"', '"api_key"'] as $secret) {
+foreach (['secret dialogue', 'secret prompt', 'secret key', 'secret token', 'secret-key-123456', 'sk-secret-token-value', 'raw_dialogue', 'forged=true', 'The NPC said the secret phrase', '"text"', '"api_key"', 'private name', 'private letter body', '"owner_name"', '"source_body"'] as $secret) {
     check(!str_contains($logged, $secret), 'unapproved log data dropped');
 }
-check(substr_count($logged, "\n") === 12, 'each caller produces one physical log line');
+check(substr_count($logged, "\n") === 17, 'each caller produces one physical log line');
 
 $engineRoot = sys_get_temp_dir() . '/saslog-engine-' . bin2hex(random_bytes(4));
 mkdir($engineRoot . '/log', 0700, true);
@@ -82,11 +117,23 @@ $lines[] = $prefix . json_encode([
     'plugin' => 'sworn_and_scorned', 'schema_version' => 1, 'timestamp' => $stamp,
     'event' => 'new_event_from_bad_input', 'level' => 'trace', 'reason' => "dialogue\napi_key=secret",
 ], JSON_THROW_ON_ERROR);
+$lines[] = $prefix . json_encode(sasLogRecord('written_source_finished', 'info', [
+    'job_id' => 56,
+    'owner_npc_id' => 900001,
+    'playthrough_id' => '13',
+    'source_event_id' => 88,
+    'source_result' => 'abstained',
+    'reason' => 'written_capacity',
+    'origin_event_count' => 8,
+    'origin_codepoints' => 5120,
+], $stamp), JSON_THROW_ON_ERROR);
 file_put_contents($engineRoot . '/log/chim.log', implode("\n", $lines) . "\n");
 $recent = recentPluginLogs($engineRoot, 100);
 check($recent['status'] === 'available' && count($recent['entries']) === 50, 'reader caps records at 50');
-check($recent['entries'][0]['event'] === 'unknown_event' && $recent['entries'][1]['job_id'] === 55 && $recent['entries'][49]['job_id'] === 7, 'reader keeps newest plugin records and normalizes hostile records');
-check($recent['entries'][0]['reason'] === 'internal_error' && !str_contains(json_encode($recent), 'api_key=secret'), 'reader resanitizes fields before returning them');
+check($recent['entries'][0]['event'] === 'written_source_finished' && $recent['entries'][0]['source_event_id'] === 88
+    && $recent['entries'][0]['source_result'] === 'abstained' && $recent['entries'][1]['event'] === 'unknown_event'
+    && $recent['entries'][2]['job_id'] === 55 && $recent['entries'][49]['job_id'] === 8, 'reader retains and resanitizes bounded written-source records');
+check($recent['entries'][1]['reason'] === 'internal_error' && !str_contains(json_encode($recent), 'api_key=secret'), 'reader resanitizes fields before returning them');
 check(!str_contains(json_encode($recent), 'core_event') && !str_contains(json_encode($recent), 'nested_plugin') && !str_contains(json_encode($recent), 'unprefixed'), 'reader skips malformed, core, nested, and unprefixed records');
 
 $tailRoot = sys_get_temp_dir() . '/saslog-tail-' . bin2hex(random_bytes(4));
@@ -128,5 +175,8 @@ check(
         && $error->getPrevious() === $previous,
     'error carries a code, retryable flag, and previous error'
 );
+
+$switchRecord = ChimSwornAndScorned\sasLogRecord('job_finished', 'info', ['outcome'=>'paused', 'reason'=>'playthrough_switch']);
+check($switchRecord['outcome'] === 'paused' && $switchRecord['reason'] === 'playthrough_switch', 'core switch pause keeps its exact safe diagnostic');
 
 echo "logging checks passed\n";

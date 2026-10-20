@@ -40,6 +40,7 @@ function applyProposal(array $ledger, array $proposal, array $meta): array
     $transitions = [];
     $skipped = [];
     $changedIds = [];
+    $repeatedDisputeIds = [];
     $newIds = [];
     $richNewIds = [];
     $relatedIssueIds = [];
@@ -91,6 +92,9 @@ function applyProposal(array $ledger, array $proposal, array $meta): array
                 $changedIds[$issue['id']] = $to;
             } else {
                 $skipped[] = 'transition_not_allowed';
+                if ($issue['kind'] === 'promise' && $issue['status'] === 'disputed' && $to === 'disputed') {
+                    $repeatedDisputeIds[$issue['id']] = true;
+                }
             }
         }
         if (is_string($update['trajectory'])) {
@@ -195,11 +199,19 @@ function applyProposal(array $ledger, array $proposal, array $meta): array
             $position = $index[$relatedId] ?? null;
             $change = $changedIds[$relatedId] ?? null;
             $newKind = $issues[$index[$newId]]['kind'];
-            if ($position === null || !isset($changedIds[$relatedId])
-                || $issues[$position]['kind'] !== 'promise'
+            if ($position === null || $issues[$position]['kind'] !== 'promise'
                 || $issues[$position]['counterpart'] !== $meta['counterpart']
-                || ($newKind === 'promise' && $issues[$position]['direction'] !== $issues[$index[$newId]]['direction'])
+                || ($newKind === 'promise' && $issues[$position]['direction'] !== $issues[$index[$newId]]['direction'])) {
+                throw new UnexpectedValueException('proposal_related_issue_invalid');
+            }
+            if (!isset($changedIds[$relatedId])
                 || ($newKind === 'promise' ? $change !== 'renegotiated' : !in_array($change, ['broken', 'disputed'], true))) {
+                // A repeated dispute can keep its grievance without inventing a lifecycle link.
+                if ($newKind === 'grievance' && isset($repeatedDisputeIds[$relatedId])
+                    && !isset($changedIds[$relatedId]) && $issues[$position]['status'] === 'disputed') {
+                    $skipped[] = 'related_transition_not_applied';
+                    continue;
+                }
                 throw new UnexpectedValueException('proposal_related_issue_invalid');
             }
             $issues[$index[$newId]]['links'][] = $relatedId;

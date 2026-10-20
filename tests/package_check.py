@@ -46,6 +46,7 @@ SERVER_FILES = (
     "witness.php",
     "written_evidence.php",
     "written_source.php",
+    "written_worker.php",
     "worker.php",
     "hook.php",
     "lore.php",
@@ -99,7 +100,7 @@ class PackageCheck(unittest.TestCase):
         self.assertEqual(manifest["config_url"], "../ext/sworn_and_scorned/index.php?local=1")
         self.assertEqual(
             manifest["server_compatibility_reference"],
-            "Installed HerikaServer source identity: main.php sha256 ef2ff9a50203820ca5416f334504f352793ee5413053e3b7beee1a222c8e721b; deployed revision unverified",
+            "Playthrough-switch verification used HerikaServer 0ec590b42c8087860138bb4e9aab470049ff9a2b; broader installed revisions remain unverified",
         )
         EVIDENCE.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix=".sas-package-check-", dir=EVIDENCE) as directory:

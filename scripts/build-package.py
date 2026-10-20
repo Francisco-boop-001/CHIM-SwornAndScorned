@@ -47,6 +47,7 @@ SERVER_FILES = (
     "witness.php",
     "written_evidence.php",
     "written_source.php",
+    "written_worker.php",
     "worker.php",
     "hook.php",
     "lore.php",

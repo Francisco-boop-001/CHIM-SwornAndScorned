@@ -13,3 +13,6 @@ final class DecisionBackendError extends \RuntimeException
         parent::__construct($reasonCode, 0, $previous);
     }
 }
+
+// A core switch preserves the job without spending a provider retry.
+final class PlaythroughPausedException extends \RuntimeException {}

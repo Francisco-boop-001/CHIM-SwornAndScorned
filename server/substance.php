@@ -18,10 +18,12 @@ function substanceCandidates(array $lines): array
     $candidates = [];
     foreach ($lines as $position => $line) {
         if (!is_array($line) || !is_int($line['event_id'] ?? null) || $line['event_id'] <= 0
-            || !is_string($line['speaker'] ?? null) || $line['speaker'] === '' || mb_strlen($line['speaker']) > 128
-            || !is_string($line['text'] ?? null) || $line['text'] === '' || mb_strlen($line['text']) > 640) {
+            || !is_string($line['speaker'] ?? null) || $line['speaker'] === '' || !mb_check_encoding($line['speaker'], 'UTF-8') || mb_strlen($line['speaker'], 'UTF-8') > 128
+            || !is_string($line['text'] ?? null) || $line['text'] === '' || !mb_check_encoding($line['text'], 'UTF-8')) {
             continue;
         }
+        $limit = substanceLineTextLimit($line);
+        if ($limit === null || mb_strlen($line['text'], 'UTF-8') > $limit) continue;
         $candidates['L' . ($position + 1)] = capsuleFromLine($line);
     }
     return $candidates;
@@ -30,17 +32,22 @@ function substanceCandidates(array $lines): array
 // shortcut: new records require a full origin exchange within eight bounded lines; use typed relevant-source selection if larger exchanges need tracking.
 function substanceContext(array $lines): ?array
 {
-    if (!array_is_list($lines) || $lines === [] || count($lines) > 8) {
+    if (!array_is_list($lines) || $lines === [] || count($lines) > MAX_ORIGIN_CAPSULES) {
         return null;
     }
     $context = [];
     $refs = [];
+    $codepoints = 0;
     foreach ($lines as $line) {
         if (!is_array($line) || !is_int($line['event_id'] ?? null) || $line['event_id'] <= 0
-            || !is_string($line['speaker'] ?? null) || $line['speaker'] === '' || mb_strlen($line['speaker']) > 128
-            || !is_string($line['text'] ?? null) || $line['text'] === '' || mb_strlen($line['text']) > 640) {
+            || !is_string($line['speaker'] ?? null) || $line['speaker'] === '' || !mb_check_encoding($line['speaker'], 'UTF-8') || mb_strlen($line['speaker'], 'UTF-8') > 128
+            || !is_string($line['text'] ?? null) || $line['text'] === '' || !mb_check_encoding($line['text'], 'UTF-8')) {
             return null;
         }
+        $limit = substanceLineTextLimit($line);
+        if ($limit === null) return null;
+        $lineCodepoints = mb_strlen($line['text'], 'UTF-8');
+        if ($lineCodepoints > $limit || ($codepoints += $lineCodepoints) > MAX_ORIGIN_CODEPOINTS) return null;
         $ref = 'e:' . $line['event_id'];
         if (isset($refs[$ref])) {
             return null;
@@ -84,16 +91,19 @@ function validateSubstance(mixed $substance): ?array
     ];
     if ($hasContext) {
         $context = $substance['context'];
-        if (!is_array($context) || !array_is_list($context) || $context === [] || count($context) > 8) {
+        if (!is_array($context) || !array_is_list($context) || $context === [] || count($context) > MAX_ORIGIN_CAPSULES) {
             throw new UnexpectedValueException('issue_substance_invalid');
         }
         $normalizedContext = [];
         $refs = [];
+        $originCodepoints = 0;
         foreach ($context as $capsule) {
             $capsule = validateSubstanceCapsule($capsule);
             if (isset($refs[$capsule['ref']])) {
                 throw new UnexpectedValueException('issue_substance_invalid');
             }
+            $originCodepoints += mb_strlen($capsule['text'], 'UTF-8');
+            if ($originCodepoints > MAX_ORIGIN_CODEPOINTS) throw new UnexpectedValueException('issue_substance_invalid');
             $refs[$capsule['ref']] = true;
             $normalizedContext[] = $capsule;
         }
@@ -117,13 +127,22 @@ function validateSubstanceForLines(mixed $substance, array $lines): ?array
         throw new UnexpectedValueException('substance_lines_invalid');
     }
     $byRef = [];
+    $sourceRefs = [];
+    foreach ([$substance['matter'], $substance['settlement']['source']] as $capsule) {
+        if ($capsule !== null) $sourceRefs[] = $capsule['ref'];
+    }
     foreach ($lines as $line) {
         if (!is_array($line) || !is_int($line['event_id'] ?? null) || $line['event_id'] <= 0
             || !is_string($line['speaker'] ?? null) || !is_string($line['text'] ?? null)) {
             throw new UnexpectedValueException('substance_lines_invalid');
         }
         $ref = 'e:' . $line['event_id'];
-        $entry = capsuleFromLine($line);
+        try {
+            $entry = capsuleFromLine($line);
+        } catch (UnexpectedValueException $exception) {
+            if (in_array($ref, $sourceRefs, true) || array_key_exists('context', $substance)) throw $exception;
+            continue;
+        }
         if (isset($byRef[$ref]) && $byRef[$ref] !== $entry) {
             throw new UnexpectedValueException('substance_lines_invalid');
         }
@@ -149,19 +168,39 @@ function validateSubstanceForLines(mixed $substance, array $lines): ?array
 
 function validateSubstanceCapsule(mixed $capsule): array
 {
-    if (!is_array($capsule) || !hasExactKeys($capsule, array_key_exists('written', $capsule) ? ['ref', 'speaker', 'text', 'written'] : ['ref', 'speaker', 'text'])
-        || !is_string($capsule['ref']) || preg_match('/\Ae:[1-9][0-9]*\z/D', $capsule['ref']) !== 1
-        || !is_string($capsule['speaker']) || $capsule['speaker'] === '' || mb_strlen($capsule['speaker']) > 128
-        || !is_string($capsule['text']) || $capsule['text'] === '' || mb_strlen($capsule['text']) > 640) {
+    $hasWritten = is_array($capsule) && array_key_exists('written', $capsule);
+    if (!is_array($capsule) || !hasExactKeys($capsule, $hasWritten ? ['ref', 'speaker', 'text', 'written'] : ['ref', 'speaker', 'text'])
+        || !is_string($capsule['ref']) || strlen($capsule['ref']) > 21 || preg_match('/\Ae:[1-9][0-9]*\z/D', $capsule['ref']) !== 1
+        || !is_string($capsule['speaker']) || $capsule['speaker'] === '' || !mb_check_encoding($capsule['speaker'], 'UTF-8') || mb_strlen($capsule['speaker'], 'UTF-8') > 128
+        || !is_string($capsule['text']) || $capsule['text'] === '' || !mb_check_encoding($capsule['text'], 'UTF-8')) {
         throw new UnexpectedValueException('issue_substance_capsule_invalid');
     }
     $normalized = ['ref' => $capsule['ref'], 'speaker' => $capsule['speaker'], 'text' => $capsule['text']];
-    if (array_key_exists('written', $capsule)) {
+    if ($hasWritten) {
         $w = persistedWrittenSource($capsule['written']);
-        if ($w['body'] !== $capsule['text'] || $w['claimed_sender']['name'] !== $capsule['speaker']) throw new UnexpectedValueException('issue_substance_capsule_invalid');
+        if ($w['body'] !== $capsule['text'] || $w['claimed_sender']['name'] !== $capsule['speaker']
+            || mb_strlen($capsule['text'], 'UTF-8') > MAX_WRITTEN_SUBSTANCE_CODEPOINTS) {
+            throw new UnexpectedValueException('issue_substance_capsule_invalid');
+        }
         $normalized['written'] = $w;
+    } elseif (mb_strlen($capsule['text'], 'UTF-8') > MAX_SPOKEN_SUBSTANCE_CODEPOINTS) {
+        throw new UnexpectedValueException('issue_substance_capsule_invalid');
     }
     return $normalized;
+}
+
+/** Return a written allowance only after its marker, envelope, body, and claimed sender agree. */
+function substanceLineTextLimit(array $line): ?int
+{
+    if (!array_key_exists('written', $line)) return MAX_SPOKEN_SUBSTANCE_CODEPOINTS;
+    if (($line['type'] ?? null) !== 'written_evidence') return null;
+    try {
+        $written = persistedWrittenSource($line['written']);
+    } catch (\Throwable) {
+        return null;
+    }
+    if ($written['body'] !== ($line['text'] ?? null) || $written['claimed_sender']['name'] !== ($line['speaker'] ?? null)) return null;
+    return MAX_WRITTEN_SUBSTANCE_CODEPOINTS;
 }
 
 function hasExactKeys(array $value, array $keys): bool
@@ -171,6 +210,13 @@ function hasExactKeys(array $value, array $keys): bool
 
 function capsuleFromLine(array $line): array
 {
+    if (!is_int($line['event_id'] ?? null) || $line['event_id'] <= 0
+        || !is_string($line['speaker'] ?? null) || $line['speaker'] === '' || !mb_check_encoding($line['speaker'], 'UTF-8') || mb_strlen($line['speaker'], 'UTF-8') > 128
+        || !is_string($line['text'] ?? null) || $line['text'] === '' || !mb_check_encoding($line['text'], 'UTF-8')) {
+        throw new UnexpectedValueException('substance_lines_invalid');
+    }
+    $limit = substanceLineTextLimit($line);
+    if ($limit === null || mb_strlen($line['text'], 'UTF-8') > $limit) throw new UnexpectedValueException('substance_lines_invalid');
     $capsule = ['ref'=>'e:'.$line['event_id'],'speaker'=>$line['speaker'],'text'=>$line['text']];
     if (isset($line['written'])) $capsule['written'] = persistedWrittenSource($line['written']);
     return $capsule;

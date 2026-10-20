@@ -3,10 +3,23 @@ declare(strict_types=1);
 
 require __DIR__ . '/support/check.php';
 require __DIR__ . '/support/fixtures.php';
+require __DIR__ . '/support/written_fixture.php';
 require __DIR__ . '/../server/substance.php';
 require __DIR__ . '/../server/ledger.php';
 
-use function ChimSwornAndScorned\{substanceCandidates, substanceContext, validateIssue, validateSubstance, validateSubstanceForLines};
+use function ChimSwornAndScorned\{substanceCandidates, substanceContext, validateIssue, validateSubstance, validateSubstanceForLines, writtenLineFromEventRow};
+
+$playthrough = ['id' => 'unprofiled', 'player_name' => 'Hawke'];
+$writtenLineFor = static function (int $eventId, string $body) use ($playthrough): ?array {
+    $row = writtenFixture($eventId, $body);
+    $envelope = json_decode($row['data'], true, 512, JSON_THROW_ON_ERROR);
+    $prefix = sprintf('%08x', $eventId);
+    $envelope['document_id'] = $prefix . '-1111-4111-8111-111111111111';
+    $envelope['receipt']['receipt_id'] = $prefix . '-2222-4222-8222-222222222222';
+    $envelope['receipt']['operation_id'] = $prefix . '-3333-4333-8333-333333333333';
+    $row['data'] = json_encode($envelope, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    return writtenLineFromEventRow($row, $playthrough);
+};
 
 $longText = str_repeat('The agreement names 50 septims, due tomorrow. ', 4);
 $lines = [
@@ -22,6 +35,24 @@ check($candidates['L1'] === ['ref' => 'e:41', 'speaker' => 'Farkas', 'text' => $
 check($candidates['L4']['text'] === str_repeat('é', 640) && mb_strlen($candidates['L4']['text']) === 640, 'candidate accepts the 640-character boundary and counts characters');
 check($candidates['L4']['speaker'] === str_repeat('S', 128), 'candidate retains the 128-character speaker boundary');
 
+$written2000 = $writtenLineFor(61, str_repeat('🙂', 2000));
+check($written2000 !== null && mb_strlen($written2000['text'], 'UTF-8') === 2000, 'validated written source reaches the 2000-codepoint boundary');
+check(array_keys(substanceCandidates([$written2000])) === ['L1'], 'validated written body above the speech limit is a substance candidate');
+check(substanceContext([$written2000]) !== null, 'validated written body above the speech limit enters a new context');
+$written2001Row = writtenFixture(62, str_repeat('🙂', 2001));
+check(writtenLineFromEventRow($written2001Row, $playthrough) === null, 'written body above 2000 codepoints fails envelope validation');
+$tamperedWritten = $written2000;
+$tamperedWritten['text'] = str_repeat('🙂', 728);
+$tamperedWritten['written']['body'] = 'different body';
+check(substanceCandidates([$tamperedWritten]) === [], 'invalid written source cannot borrow the extended text allowance');
+check(substanceContext([$tamperedWritten]) === null, 'changed written body cannot enter a new context');
+$wrongSenderWritten = $written2000;
+$wrongSenderWritten['speaker'] = 'Other sender';
+check(substanceCandidates([$wrongSenderWritten]) === [], 'written allowance requires the validated claimed sender');
+$unvalidatedWritten = $written2000;
+$unvalidatedWritten['written']['receipt']['status'] = 'pending';
+check(substanceCandidates([$unvalidatedWritten]) === [], 'unvalidated written envelope cannot borrow the extended text allowance');
+
 $complete = [
     'version' => 1,
     'nature' => 'obligation',
@@ -30,6 +61,17 @@ $complete = [
 ];
 check(validateSubstance($complete) === $complete, 'valid supported obligation substance round-trips');
 check(validateSubstanceForLines($complete, $lines) === $complete, 'exact full source utterance validates against witnessed lines');
+$conflictingDuplicate = sampleLine(41, 'Farkas', 'Different text for the same event ID.');
+rejected(
+    fn () => validateSubstanceForLines($complete, [$lines[0], $conflictingDuplicate]),
+    'conflicting duplicate witnessed event IDs cannot validate a source'
+);
+$oversizedSource = $complete;
+$oversizedSource['matter'] = ['ref' => 'e:42', 'speaker' => 'Lydia', 'text' => str_repeat('x', 640)];
+rejected(
+    fn () => validateSubstanceForLines($oversizedSource, $lines),
+    'an oversized witnessed line cannot validate a referenced substance source'
+);
 
 $explicit = [
     'version' => 1,
@@ -70,6 +112,47 @@ $eightLines = array_merge(array_slice($splitTermsLines, 0, 1), [sampleLine(53, '
 check(count(substanceContext($eightLines) ?? []) === 8, 'context accepts the eight-line boundary');
 check(substanceContext(array_merge($eightLines, [sampleLine(60, 'Aela', 'tenth line')])) === null, 'context exceeding eight witnessed lines abstains');
 check(substanceContext([sampleLine(60, 'Aela', str_repeat('x', 641))]) === null, 'context abstains rather than clipping an oversized witnessed line');
+$eightOrigin = array_slice($eightLines, 0, 8);
+$eightContext = substanceContext($eightOrigin);
+$nineContext = substanceContext($eightLines);
+$eightPersisted = array_replace($splitSubstance, ['matter' => $eightContext[0], 'context' => $eightContext]);
+check(validateSubstance($eightPersisted) === $eightPersisted, 'persisted context accepts eight capsules');
+$ninePersisted = array_replace($splitSubstance, ['matter' => $nineContext[0] ?? $eightContext[0], 'context' => array_merge($eightContext, [
+    ['ref' => 'e:60', 'speaker' => 'Aela', 'text' => 'tenth line'],
+])]);
+rejected(fn () => validateSubstance($ninePersisted), 'persisted context rejects a ninth capsule');
+
+$written2000Context = substanceContext([$written2000]);
+$writtenPersisted = [
+    'version' => 1,
+    'nature' => 'obligation',
+    'matter' => $written2000Context[0],
+    'settlement' => ['mode' => 'complete_obligation', 'source' => null],
+    'context' => $written2000Context,
+];
+check(validateSubstance($writtenPersisted) === $writtenPersisted, 'persisted context accepts exact validated 2000-codepoint written body');
+$wrongTypeWritten = $written2000;
+$wrongTypeWritten['type'] = 'chat';
+rejected(fn () => validateSubstanceForLines($writtenPersisted, [$wrongTypeWritten]), 'non-written source type cannot borrow the written allowance');
+$forgedLongCapsule = $writtenPersisted;
+$forgedLongCapsule['context'][0]['text'] = str_repeat('🙂', 728);
+rejected(fn () => validateSubstance($forgedLongCapsule), 'persisted context rejects text changed from its validated written envelope');
+
+$mixedExact = [
+    $writtenLineFor(70, str_repeat('🙂', 2000)),
+    $writtenLineFor(71, str_repeat('🧭', 2000)),
+    sampleLine(72, 'Farkas', str_repeat('s', 640)),
+    sampleLine(73, 'Lydia', str_repeat('t', 480)),
+];
+$mixedOverflow = $mixedExact;
+$mixedOverflow[3] = sampleLine(73, 'Lydia', str_repeat('t', 481));
+$mixedExactContext = substanceContext($mixedExact);
+check($mixedExactContext !== null && array_sum(array_map(static fn (array $capsule): int => mb_strlen($capsule['text'], 'UTF-8'), $mixedExactContext)) === 5120, 'mixed written and spoken context accepts exact 5120-codepoint aggregate');
+check(substanceContext($mixedOverflow) === null, 'mixed written and spoken context rejects aggregate 5121 without truncation');
+$mixedPersisted = array_replace($splitSubstance, ['matter' => $mixedExactContext[0], 'context' => $mixedExactContext]);
+check(validateSubstance($mixedPersisted) === $mixedPersisted, 'persisted mixed context accepts exact 5120-codepoint aggregate');
+$mixedPersisted['context'][3]['text'] .= 'x';
+rejected(fn () => validateSubstance($mixedPersisted), 'persisted mixed context rejects aggregate 5121');
 rejected(fn () => validateSubstance(array_replace($splitSubstance, ['context' => []])), 'context must be a nonempty list');
 rejected(fn () => validateSubstance(array_replace($splitSubstance, ['context' => [$splitContext[0], $splitContext[0]]])), 'context references must be unique');
 

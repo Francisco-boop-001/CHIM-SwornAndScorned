@@ -37,6 +37,8 @@ interface JobDeps
 function processJob(array $job, JobDeps $deps): array
 {
     $result = static fn (string $outcome, string $reason): array => ['outcome' => $outcome, 'reason' => $reason];
+    $isPaused = static fn (): bool => function_exists('ptr_runtime_paused') && \ptr_runtime_paused();
+    if ($isPaused()) return $result('paused', 'playthrough_switch');
     $eventIds = $job['event_ids'] ?? null;
     if (!is_array($eventIds) || !array_is_list($eventIds) || $eventIds === []) {
         return $result('stale', 'events_missing');
@@ -80,18 +82,44 @@ function processJob(array $job, JobDeps $deps): array
     if ($counterpart === null) {
         return $result('stale', 'counterpart_unresolved');
     }
+    $logWrittenSource = static function (array $sourceLines, string $sourceResult, string $reason, array $origin) use ($job, $ownerId, $playthroughId): void {
+        $originCodepoints = 0;
+        foreach ($origin as $originLine) {
+            $text = $originLine['text'] ?? null;
+            if (!is_string($text) || !mb_check_encoding($text, 'UTF-8')) return;
+            $originCodepoints += mb_strlen($text, 'UTF-8');
+        }
+        foreach ($sourceLines as $sourceLine) {
+            if (!is_int($sourceLine['event_id'] ?? null) || $sourceLine['event_id'] < 1) continue;
+            sasLog('written_source_finished', $sourceResult === 'evaluated' ? 'info' : 'warning', [
+                'job_id' => $job['id'] ?? null,
+                'owner_npc_id' => $ownerId,
+                'playthrough_id' => $playthroughId,
+                'source_event_id' => $sourceLine['event_id'],
+                'source_result' => $sourceResult,
+                'reason' => $reason,
+                'origin_event_count' => count($origin),
+                'origin_codepoints' => $originCodepoints,
+            ]);
+        }
+    };
     $ledger = $deps->ledgerFor($ownerId, $playthroughId);
     $writtenLines = array_values(array_filter($lines, static fn(array $line): bool => isset($line['written'])));
     foreach ($writtenLines as $line) {
         $w = $line['written'];
         if ($w['playthrough_id'] !== $playthroughId || $w['recipient']['id'] !== $ownerId
             || $w['recipient']['name'] !== $ownerName || writtenActorKey($w['claimed_sender']) !== $counterpart) {
+            $logWrittenSource([$line], 'abstained', 'written_source_invalid', $lines);
             return $result('stale', 'written_source_invalid');
         }
     }
     $writtenState = writtenSourceState($ledger, $writtenLines);
-    if ($writtenState === 'written_source_changed') return $result('stale', $writtenState);
+    if ($writtenState === 'written_source_changed') {
+        $logWrittenSource($writtenLines, 'abstained', $writtenState, $lines);
+        return $result('stale', $writtenState);
+    }
     if ($writtenState === 'written_capacity') {
+        $logWrittenSource($writtenLines, 'abstained', $writtenState, $lines);
         $lines = array_values(array_filter($lines, static fn(array $line): bool => !isset($line['written'])));
         if ($lines === []) return $result('stale', 'written_capacity');
         $eventIds = array_column($lines, 'event_id');
@@ -102,9 +130,20 @@ function processJob(array $job, JobDeps $deps): array
     }
 
     if ($writtenLines !== [] && $writtenState === 'replay') {
+        if ($isPaused()) return $result('paused', 'playthrough_switch');
         $status = $deps->commitLedger(['owner_npc_id'=>$ownerId,'owner_name'=>$ownerName,'playthrough_id'=>$playthroughId,
             'event_ids'=>$eventIds,'counterpart_name'=>$counterpartName,'counterpart_key'=>$counterpart,'source_lines'=>$lines],
             static fn(array $fresh): array => ['status'=>writtenSourceState($fresh, $writtenLines) === 'replay' ? 'replay' : 'written_source_changed']);
+        if ($status === 'replay') {
+            foreach ($writtenLines as $line) {
+                foreach ($ledger['written_sources'] as $source) {
+                    if ($source['event_id'] !== $line['event_id']) continue;
+                    $budgeted = $source['result'] === 'substance_budget';
+                    $logWrittenSource([$line], $budgeted ? 'abstained' : 'evaluated', $budgeted ? 'substance_budget' : 'replay', $lines);
+                    break;
+                }
+            }
+        }
         return $result($status === 'replay' ? 'done' : 'stale', $status);
     }
     $backendKind = $job['backend'] ?? 'decisions';
@@ -137,8 +176,13 @@ function processJob(array $job, JobDeps $deps): array
             'open_issues' => $open,
         ], $backend, $policy, static function (array $entry) use ($job, $ownerId, $backend): void {
             sasLog('issue_evaluated', 'info', ['job_id' => $job['id'], 'owner_npc_id' => $ownerId, 'backend' => $backend->name()] + $entry);
+        }, static function () use ($isPaused): void {
+            if ($isPaused()) throw new PlaythroughPausedException();
         });
+    } catch (PlaythroughPausedException) {
+        return $result('paused', 'playthrough_switch');
     } catch (DecisionBackendError $error) {
+        if ($isPaused()) return $result('paused', 'playthrough_switch');
         return $result($error->retryable ? 'retry' : 'failed', $error->reasonCode);
     }
 
@@ -158,12 +202,20 @@ function processJob(array $job, JobDeps $deps): array
         'policy' => $policy,
     ];
     if ($writtenLines !== []) $meta['source_lines'] = $lines;
+    if ($isPaused()) return $result('paused', 'playthrough_switch');
     $status = $deps->commitLedger($request, static fn (array $fresh): array => applyProposal($fresh, $proposal, $meta));
+    if ($status === 'committed') {
+        foreach ($writtenLines as $line) {
+            $sourceResult = writtenSourceEntry($line, $lines)['result'];
+            $budgeted = $sourceResult === 'substance_budget';
+            $logWrittenSource([$line], $budgeted ? 'abstained' : 'evaluated', $budgeted ? 'substance_budget' : 'committed', $lines);
+        }
+    }
     return match ($status) {
         'committed', 'replay', 'unchanged' => $result('done', $status),
         'restore_policy' => $result('paused', 'restore_policy'),
         'busy' => $result('retry', 'owner_busy'),
-        'owner_changed', 'playthrough_changed', 'events_missing', 'edge_invalid', 'counterpart_changed', 'disabled', 'cast_changed', 'written_source_changed', 'written_capacity', 'written_source_invalid' => $result('stale', $status),
+        'owner_changed', 'playthrough_changed', 'events_missing', 'edge_invalid', 'counterpart_changed', 'disabled', 'cast_changed', 'interaction_changed', 'written_source_changed', 'written_capacity', 'written_source_invalid' => $result('stale', $status),
         default => $result('stale', 'commit_rejected'),
     };
 }
