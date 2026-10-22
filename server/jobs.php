@@ -34,7 +34,7 @@ interface JobDeps
 }
 
 /** Evaluate one chronological per-perspective job and commit only against freshly validated state. */
-function processJob(array $job, JobDeps $deps): array
+function processJob(array $job, JobDeps $deps, ?callable $onFallback = null): array
 {
     $result = static fn (string $outcome, string $reason): array => ['outcome' => $outcome, 'reason' => $reason];
     $isPaused = static fn (): bool => function_exists('ptr_runtime_paused') && \ptr_runtime_paused();
@@ -162,6 +162,9 @@ function processJob(array $job, JobDeps $deps): array
     $policy = $chosen[1] ?? null;
     if (!$backend instanceof DecisionBackend || !is_array($policy)) {
         return $result('failed', 'backend_unavailable');
+    }
+    if ($onFallback !== null && $backendKind === 'llm' && ($job['backend'] ?? 'decisions') === 'decisions') {
+        $onFallback();
     }
 
     $open = array_values(array_filter(

@@ -237,7 +237,11 @@ function workerTick(Pg $pg, #[\SensitiveParameter] array $settings, int $now, ?c
     $deps = new PgJobDeps($pg, new PerspectiveStore($pg), $playthrough, $settings, $transport ?? curlTransport(), $completion ?? relationshipConnectorCompletion(1024, $job['owner_name'], $playthrough['player_name'], 20, array_key_exists('_interaction_generation', $settings)));
     $started = hrtime(true);
     try {
-        $result = processJob($job, $deps);
+        $result = processJob($job, $deps, static function () use (&$job): void {
+            // Retain the actual backend even if evaluation or persistence later throws.
+            $job['backend'] = 'llm';
+            $job['failures'] = 0;
+        });
     } catch (\Throwable) {
         $result = ['outcome' => 'retry', 'reason' => 'internal_error'];
     }

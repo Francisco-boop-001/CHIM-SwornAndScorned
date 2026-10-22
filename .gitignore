@@ -37,3 +37,5 @@ Thumbs.db
 
 # Private cluster harness depends on a frozen local evidence identity.
 /tests/integration/repeated_dispute_it.php
+
+!/docs/verification/fixes-0.1.12.md

@@ -165,7 +165,9 @@ $deps = $freshDeps($fallbackAnswers, 'llm-fallback');
 $fallbackBackend = $deps->backends['decisions'][0];
 $deps->backends['decisions'] = null;
 $deps->backends['llm'] = [$fallbackBackend, POLICY_LLM_FALLBACK];
-check(processJob($job, $deps) === ['outcome' => 'done', 'reason' => 'committed'], 'missing Decisions key uses the CHIM fallback');
+$fallbackSelected = false;
+check(processJob($job, $deps, static function () use (&$fallbackSelected): void { $fallbackSelected = true; }) === ['outcome' => 'done', 'reason' => 'committed'], 'missing Decisions key uses the CHIM fallback in the same tick');
+check($fallbackSelected, 'worker learns the effective fallback before evaluation or persistence can throw');
 check($deps->backendRequests === ['decisions', 'llm'], 'fallback is requested after Decisions is unavailable');
 check(issueById($deps->ledger, issueId('e:5', 'npc:3', 'promise'))['evidence'][0]['backend'] === 'llm-fallback', 'fallback identity is recorded');
 
